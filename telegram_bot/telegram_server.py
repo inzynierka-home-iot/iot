@@ -1,70 +1,108 @@
-import asyncio
 import logging
 import env
-from asyncio_paho import AsyncioPahoClient
-from telegram import Update, Bot
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, filters, MessageHandler
-import mqtt_handler
+import telegram
+from telegram import Update
+from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
+from paho.mqtt import client as mqtt_client
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
-# client = mqtt_handler.connect_mqtt(env.BROKER_IP)
+
 client = None
+port = 1883
 led_topic = 'home/led'
 temp_topic = 'home/temp'
 button_topic = 'home/button'
 debug_topic = 'home/debug'
-chat_id = None
-bot = None
+client_id = 'python-mqtt'
+chat_id = env.TELEGRAM_USER_ID
+temp = None
+temp_subscribed = False
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Get the text of the user's message
-    message_text = update.message.text
-    print(f'Message: {message_text}')
+def connect_mqtt(broker) -> mqtt_client:
+    def on_connect(client, userdata, flags, rc):
+        if rc == 0:
+            print("Connected to MQTT Broker!")
+            subscribe(client, [(temp_topic, 0), (button_topic, 0), (debug_topic, 0)])
+        else:
+            print("Failed to connect, return code %d\n", rc)
+
+    client = mqtt_client.Client(client_id)
+    client.on_connect = on_connect
+    client.connect(broker, port)
+    return client
+
+def publish_start(client, topic):
+    msg = 'LED1-ON'
+    result = client.publish(topic, msg)
+    # result: [0, 1]
+    status = result[0]
+    if status == 0:
+        print(f"Send `{msg}` to topic `{topic}`")
+    else:
+        print(f"Failed to send message to topic {topic}")
+
+def publish_stop(client, topic):
+    msg = 'LED1-OFF'
+    result = client.publish(topic, msg)
+    # result: [0, 1]
+    status = result[0]
+    if status == 0:
+        print(f"Send `{msg}` to topic `{topic}`")
+    else:
+        print(f"Failed to send message to topic {topic}")
+
+def subscribe(client, topics):
+    bot = telegram.Bot(token=env.TELEGRAM_BOT_TOKEN)
+
+    def on_message(client, userdata, msg):
+        if msg.topic == temp_topic:
+            global temp
+            temp = msg.payload.decode().split('-')[1]
+            print(f'Received message {msg.payload.decode()} from topic {msg.topic} with temp {temp}')
+            if temp_subscribed:
+                bot.send_message(chat_id=chat_id, text=f'Temperature is {temp}')
+        elif msg.topic == button_topic:
+            print(f'Received message {msg.payload.decode()} from topic {msg.topic}')
+            bot.send_message(chat_id=chat_id, text='Button clicked')
+        elif msg.topic == debug_topic:
+            print(f'New device has been connected {msg.payload.decode()}')
+            bot.send_message(chat_id=chat_id, text=f'New device has been connected {msg.payload.decode()}')
+
+    client.subscribe(topics)
+    client.on_message = on_message
+
+def handle_message(update: Update, context: CallbackContext):
     global chat_id
+    global temp_subscribed
     chat_id = update.effective_chat.id
+    message_text = update.message.text
 
-    if message_text == '/start':
-        async with AsyncioPahoClient() as client:
-            client.asyncio_listeners.add_on_connect(mqtt_handler.on_connect_async)
-            client.asyncio_listeners.add_on_message(mqtt_handler.on_message_async)
-            await client.asyncio_connect(env.BROKER_IP, 1883)
-            # await mqtt_handler.run(client, handle_button)
-    elif message_text == '/lightsOn':
-        await context.bot.send_message(chat_id=update.effective_chat.id,
-                                       text=f'Lights turned on! You are enlighted now!')
-        mqtt_handler.publish_start(client, led_topic)
+    if message_text == '/lightsOn':
+        context.bot.send_message(chat_id=chat_id, text=f'Lights turned on! You are enlighted now!')
+        publish_start(client, led_topic)
     elif message_text == '/lightsOff':
-        await context.bot.send_message(chat_id=update.effective_chat.id,
-                                       text=f'Lights turned off! Darkness is among us!')
-        mqtt_handler.publish_stop(client, led_topic)
+        context.bot.send_message(chat_id=chat_id, text=f'Lights turned off! Darkness is among us!')
+        publish_stop(client, led_topic)
     elif message_text == '/getTemp':
-        await context.bot.send_message(chat_id=update.effective_chat.id,
-                                       text=f'Temperature is {mqtt_handler.get_temp()}')
+        context.bot.send_message(chat_id=chat_id,  text=f'Temperature is {temp}')
+    elif message_text == '/subscribeTemp':
+        context.bot.send_message(chat_id=chat_id, text=f'Temperature subscribed!')
+        temp_subscribed = True
+    elif message_text == '/unsubscribeTemp':
+        context.bot.send_message(chat_id=chat_id, text=f'Temperature unsubscribed!')
+        temp_subscribed = False
     else:
-        await handle_button()
-
-
-async def handle_button():
-    global chat_id, bot
-    if chat_id is not None:
-        await bot.send_message(chat_id=chat_id,
-                                     text=f'Button clicked!')
-    else:
-        print('Chat id is None')
-
-async def handle_mqtt():
-    global bot, client
-    bot = Bot(token = env.TELEGRAM_BOT_TOKEN)
-    async with bot:
-        await mqtt_handler.run(client, handle_button)
-
+        context.bot.send_message(chat_id=chat_id, text='Unknown command')
 
 if __name__ == '__main__':
-    application = ApplicationBuilder().token(env.TELEGRAM_BOT_TOKEN).build()
+    updater = Updater(token=env.TELEGRAM_BOT_TOKEN)
+    dispatcher = updater.dispatcher
+    client = connect_mqtt(env.BROKER_IP)
+    client.loop_start()
 
-    application.add_handler(MessageHandler(filters.COMMAND, handle_message))
+    dispatcher.add_handler(MessageHandler(Filters.command, handle_message))
 
-    application.run_polling()
+    updater.start_polling()
