@@ -4,17 +4,18 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-const char* ssid = ""; // network name
-const char* password = ""; // network password
-const char* mqtt_server = "" // RaspberryPi IP address;
-const char* deviceName = "NODE-1"; 
+#define PUBLISH_TOPIC_PREFIX "home-1-out"
+#define SUBSCRIBE_TOPIC_PREFIX "home-1-in"
 
-const char* debugTopic = "home/debug"; 
-const char* ledTopic = "home/led"; 
-const char* tempTopic = "home/temp";
-const char* buttonTopic = "home/button";
-const int ledPin = 15;
-const int buttonPin = 23;
+const char* ssid = "";
+const char* password = "";
+const char* mqtt_server = "";
+const char* deviceName = "node-1"; 
+
+const int ledPinGreen = 15;
+const int ledPinYellow = 22;
+const int ledPinRed = 23;
+const int buttonPin = 21;
 const int tempPin = 2;
 const int tempDelay = 5000;
 
@@ -26,7 +27,22 @@ DallasTemperature DS18B20(&oneWire);
 unsigned long tempPreviousTime = 0;
 
 float tempC;
-char tempMsgBuff[15];
+char msgBuff[30];
+char topicBuff[30];
+bool lockStatus = false;
+
+void presentation() {
+  sprintf(topicBuff, "%s/1/0/0/0/3", PUBLISH_TOPIC_PREFIX);
+  client.publish(topicBuff, "Green LED");
+  sprintf(topicBuff, "%s/1/1/0/0/6", PUBLISH_TOPIC_PREFIX);
+  client.publish(topicBuff, "Temperature sensor");
+  sprintf(topicBuff, "%s/1/2/0/0/3", PUBLISH_TOPIC_PREFIX);
+  client.publish(topicBuff, "Yellow LED");
+  sprintf(topicBuff, "%s/1/3/0/0/3", PUBLISH_TOPIC_PREFIX);
+  client.publish(topicBuff, "Red LED");
+  sprintf(topicBuff, "%s/1/4/0/0/19", PUBLISH_TOPIC_PREFIX);
+  client.publish(topicBuff, "Button");
+}
 
 void reconnect() {
   bool ctd = false;
@@ -37,8 +53,6 @@ void reconnect() {
     if (client.connect(deviceName)) {
       ctd = true;
       Serial.println("Connected!");
-      delay(1000);
-      client.publish(debugTopic, "Hello from NODE-1"); 
     } else {
       Serial.println(".");
       delay(1000);
@@ -47,27 +61,54 @@ void reconnect() {
 }
 
 void receiveMessage(String topic, byte* payload, unsigned int length) {
-  String help;
+  String payloadString;
   Serial.println("Received message:");
   Serial.print("\tTopic: ");
   Serial.println(topic);
   Serial.print("\tPayload: \"");
   for (int i = 0; i < length; i++) {
     Serial.print((char) payload[i]);
-    help += (char) payload[i];
+    payloadString += (char) payload[i];
   }
   Serial.println("\"");
 
-  if (topic == ledTopic) {
-    if (help == "LED1-ON") {
-      digitalWrite(ledPin, HIGH);
-      Serial.println("LED1: ON"); 
-    } else if (help == "LED1-OFF") {
-      digitalWrite(ledPin, LOW);
-      Serial.println("LED1: OFF");
-    } else {
-      Serial.println("Unknown command");
-    }
+  // set
+  if (topic == "home-1-in/1/0/1/0/2") {
+    digitalWrite(ledPinGreen, payloadString == "1" ? HIGH : LOW);
+  }
+  if (topic == "home-1-in/1/2/1/0/2") {
+    digitalWrite(ledPinYellow, payloadString == "1" ? HIGH : LOW);
+  }
+  if (topic == "home-1-in/1/3/1/0/2") {
+    digitalWrite(ledPinRed, payloadString == "1" ? HIGH : LOW);
+  }
+
+  // request
+  if (topic == "home-1-in/1/0/2/0/2") {
+    sprintf(topicBuff, "%s/1/0/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(msgBuff, "%d", digitalRead(ledPinGreen));
+    client.publish(topicBuff, msgBuff);
+  }
+  if (topic == "home-1-in/1/1/2/0/0") {
+    DS18B20.requestTemperatures();
+    tempC = DS18B20.getTempCByIndex(0);
+    sprintf(topicBuff, "%s/1/1/1/0/0", PUBLISH_TOPIC_PREFIX);
+    sprintf(msgBuff, "%f", tempC);
+    client.publish(topicBuff, msgBuff);
+  }
+  if (topic == "home-1-in/1/2/2/0/2") {
+    sprintf(topicBuff, "%s/1/2/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(msgBuff, "%d", digitalRead(ledPinYellow));
+    client.publish(topicBuff, msgBuff);
+  }
+  if (topic == "home-1-in/1/3/2/0/2") {
+    sprintf(topicBuff, "%s/1/3/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(msgBuff, "%d", digitalRead(ledPinRed));
+    client.publish(topicBuff, msgBuff);
+  }
+  if (topic == "home-1-in/1/4/2/0/36") {
+    sprintf(topicBuff, "%s/1/4/1/0/36", PUBLISH_TOPIC_PREFIX);
+    client.publish(topicBuff, lockStatus ? "1" : "0");
   }
 }
 
@@ -88,16 +129,20 @@ void setUpWifi() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(ledPin, OUTPUT);
+  pinMode(ledPinGreen, OUTPUT);
+  pinMode(ledPinYellow, OUTPUT);
+  pinMode(ledPinRed, OUTPUT);
   button.setDebounceTime(50);
   DS18B20.begin();
   setUpWifi(); 
   delay(1000);
   client.setServer(mqtt_server, 1883);
   client.connect(deviceName); 
-  client.subscribe(ledTopic); 
+
+  sprintf(topicBuff, "%s/1/#", SUBSCRIBE_TOPIC_PREFIX);
+  client.subscribe(topicBuff);
   client.setCallback(receiveMessage); 
-  client.publish(debugTopic, "Hello from NODE-1"); 
+  presentation();
 }
 
 void tempLoop() {
@@ -107,11 +152,10 @@ void tempLoop() {
     tempPreviousTime = tempCurrentTime;
     DS18B20.requestTemperatures();
     tempC = DS18B20.getTempCByIndex(0);
-    sprintf(tempMsgBuff, "TEMP1-%f", tempC);
-    Serial.println(tempMsgBuff);
-    Serial.println(tempTopic);
+    sprintf(msgBuff, "%f", tempC);
     if (client.connected()) {
-      client.publish(tempTopic, tempMsgBuff);
+      sprintf(topicBuff, "%s/1/1/1/0/0", PUBLISH_TOPIC_PREFIX);
+      client.publish(topicBuff, msgBuff);
     }
   }
 }
@@ -119,7 +163,9 @@ void tempLoop() {
 void buttonLoop() {
   button.loop();
   if (button.isPressed() && client.connected()) {
-    client.publish(buttonTopic, "BUTTON1-PRESSED");
+    lockStatus = !lockStatus;
+    sprintf(topicBuff, "%s/1/4/1/0/36", PUBLISH_TOPIC_PREFIX);
+    client.publish(topicBuff, lockStatus ? "1" : "0");
     Serial.println("Button pressed");
   }
 }
@@ -135,7 +181,7 @@ void loop() {
   if (!client.loop()) {
     client.connect(deviceName);
     if (client.connected()) {
-      client.publish(debugTopic, "Hello from NODE-1"); 
+      presentation();
     }
   }
 }
