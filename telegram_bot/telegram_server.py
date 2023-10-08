@@ -4,6 +4,10 @@ import telegram
 from telegram import Update
 from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
 from paho.mqtt import client as mqtt_client
+from device import Device
+from device_types import DeviceType
+from action_types import ActionType
+from connected_devices import connected_devices
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -12,90 +16,123 @@ logging.basicConfig(
 
 client = None
 port = 1883
-led_topic = 'home/led'
-temp_topic = 'home/temp'
-button_topic = 'home/button'
-debug_topic = 'home/debug'
 client_id = 'python-mqtt'
 chat_id = env.TELEGRAM_USER_ID
-temp = None
-temp_subscribed = False
+connected_devices = connected_devices
+
 
 def connect_mqtt(broker) -> mqtt_client:
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
-            print("Connected to MQTT Broker!")
-            subscribe(client, [(temp_topic, 0), (button_topic, 0), (debug_topic, 0)])
+            print('Connected to MQTT Broker!')
+            subscribe(client, [('home-1-out/#', 0), ('home-1-in/#', 0)])
         else:
-            print("Failed to connect, return code %d\n", rc)
+            print('Failed to connect, return code %d\n', rc)
 
     client = mqtt_client.Client(client_id)
     client.on_connect = on_connect
     client.connect(broker, port)
     return client
 
-def publish_start(client, topic):
-    msg = 'LED1-ON'
-    result = client.publish(topic, msg)
+def publish_raw(client, msg):
+    home_id_in, node_id, device_id, command, ack, t_msg = msg.split('/')
+    t, payload = t_msg.split(':')
+    topic = f'{home_id_in}/{node_id}/{device_id}/{command}/{ack}/{t}'
+    result = client.publish(topic, payload)
     # result: [0, 1]
     status = result[0]
     if status == 0:
-        print(f"Send `{msg}` to topic `{topic}`")
+        print(f'Send `{msg}` to topic `{topic}`')
     else:
-        print(f"Failed to send message to topic {topic}")
+        print(f'Failed to send message to topic `{topic}`')
 
-def publish_stop(client, topic):
-    msg = 'LED1-OFF'
-    result = client.publish(topic, msg)
-    # result: [0, 1]
-    status = result[0]
-    if status == 0:
-        print(f"Send `{msg}` to topic `{topic}`")
-    else:
-        print(f"Failed to send message to topic {topic}")
+def publish_message(client, home_id, node_id, device_id, set, params):
+    actions = params.split('?')[1:]
+    for action in actions:
+        action_name = action.split('=')[0]
+        action_value = action.split('=')[1]
+        topic = f'{home_id}-in/{node_id}/{device_id}/{"1" if set else "2"}/0/{ActionType[action_name].value[0]}'
+        result = client.publish(topic, action_value)
+        # result: [0, 1]
+        status = result[0]
+        if status == 0:
+            print(f'Send `{action_value}` to topic `{topic}`')
+        else:
+            print(f'Failed to send message to topic `{topic}`')
+
 
 def subscribe(client, topics):
     bot = telegram.Bot(token=env.TELEGRAM_BOT_TOKEN)
 
     def on_message(client, userdata, msg):
-        if msg.topic == temp_topic:
-            global temp
-            temp = msg.payload.decode().split('-')[1]
-            print(f'Received message {msg.payload.decode()} from topic {msg.topic} with temp {temp}')
-            if temp_subscribed:
-                bot.send_message(chat_id=chat_id, text=f'Temperature is {temp}')
-        elif msg.topic == button_topic:
-            print(f'Received message {msg.payload.decode()} from topic {msg.topic}')
-            bot.send_message(chat_id=chat_id, text='Button clicked')
-        elif msg.topic == debug_topic:
-            print(f'New device has been connected {msg.payload.decode()}')
-            bot.send_message(chat_id=chat_id, text=f'New device has been connected {msg.payload.decode()}')
+        global connected_devices
+        home, node, device, command, ack, t = msg.topic.split('/')
+        home = home.split('-out')[0]
+        if command == '0':
+            connected_devices[f'{home}/{node}/{device}'] = Device(home, node, device, list(DeviceType)[int(t)].name, msg.payload.decode())
+        elif command == '1':
+            if f'{home}/{node}/{device}' in connected_devices:
+                connected_devices[f'{home}/{node}/{device}'].update_value(list(ActionType)[int(t)].name, msg.payload.decode())
+                if connected_devices[f'{home}/{node}/{device}'].values[list(ActionType)[int(t)].name][1]:
+                    bot.send_message(chat_id=chat_id, text=f'{connected_devices[f"{home}/{node}/{device}"].get_value(list(ActionType)[int(t)].name)}')
 
     client.subscribe(topics)
     client.on_message = on_message
 
+
 def handle_message(update: Update, context: CallbackContext):
     global chat_id
-    global temp_subscribed
     chat_id = update.effective_chat.id
     message_text = update.message.text
+    logging.log(logging.INFO, f'Received from app: {message_text}')
 
-    if message_text == '/lightsOn':
-        context.bot.send_message(chat_id=chat_id, text=f'Lights turned on! You are enlighted now!')
-        publish_start(client, led_topic)
-    elif message_text == '/lightsOff':
-        context.bot.send_message(chat_id=chat_id, text=f'Lights turned off! Darkness is among us!')
-        publish_stop(client, led_topic)
-    elif message_text == '/getTemp':
-        context.bot.send_message(chat_id=chat_id,  text=f'Temperature is {temp}')
-    elif message_text == '/subscribeTemp':
-        context.bot.send_message(chat_id=chat_id, text=f'Temperature subscribed!')
-        temp_subscribed = True
-    elif message_text == '/unsubscribeTemp':
-        context.bot.send_message(chat_id=chat_id, text=f'Temperature unsubscribed!')
-        temp_subscribed = False
+    _, home_id, node_id, device_id, action, params = message_text.split('/')
+
+    if action == 'status':
+        response = f'{{ device: "{home_id}/{node_id}/{device_id}"'
+        requests = params.split('?')[1:]
+
+        if len(requests) == 0:
+            response += connected_devices[f'{home_id}/{node_id}/{device_id}'].get_value()
+        else:
+            for request in requests:
+                response += connected_devices[f'{home_id}/{node_id}/{device_id}'].get_value(request)
+
+        response += ' }'
+
+        context.bot.send_message(chat_id=chat_id, text=response)
+    elif action == 'set':
+        publish_message(client, home_id, node_id, device_id, True, params)
+    elif action == 'get':
+        if home_id == '*':
+            context.bot.send_message(chat_id=chat_id, text=f'{connected_devices}')
+        else:
+            if node_id == '*':
+                context.bot.send_message(chat_id=chat_id, text=f'{connected_devices[home_id]}')
+            else:
+                if device_id == '*':
+                    context.bot.send_message(chat_id=chat_id, text=f'{connected_devices[home_id][node_id]}')
+                else:
+                    context.bot.send_message(chat_id=chat_id, text=f'{connected_devices[home_id][node_id][device_id]}')
+    elif action == 'subscribe':
+        requests = params.split('?')[1:]
+        if len(requests) == 0:
+            connected_devices[f'{home_id}/{node_id}/{device_id}'].subscribe()
+        else:
+            for request in requests:
+                connected_devices[f'{home_id}/{node_id}/{device_id}'].subscribe(request)
+    elif action == 'unsubscribe':
+        requests = params.split('?')[1:]
+        if len(requests) == 0:
+            connected_devices[f'{home_id}/{node_id}/{device_id}'].unsubscribe()
+        else:
+            for request in requests:
+                connected_devices[f'{home_id}/{node_id}/{device_id}'].unsubscribe(request)
+    elif action == 'raw':
+        publish_raw(client, message_text)
     else:
         context.bot.send_message(chat_id=chat_id, text='Unknown command')
+
 
 if __name__ == '__main__':
     updater = Updater(token=env.TELEGRAM_BOT_TOKEN)
@@ -103,6 +140,6 @@ if __name__ == '__main__':
     client = connect_mqtt(env.BROKER_IP)
     client.loop_start()
 
-    dispatcher.add_handler(MessageHandler(Filters.command, handle_message))
+    dispatcher.add_handler(MessageHandler(Filters.text, handle_message))
 
     updater.start_polling()
