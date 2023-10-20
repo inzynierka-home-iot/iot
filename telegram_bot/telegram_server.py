@@ -122,12 +122,13 @@ def handle_message(update: Update, context: CallbackContext):
             context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {connected_devices}}}')
         else:
             if node_id == '*':
-                context.bot.send_message(chat_id=chat_id, text=f'{connected_devices[home_id]}')
+                context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {[device for device in connected_devices if device.location == home_id]}}}')
             else:
                 if device_id == '*':
-                    context.bot.send_message(chat_id=chat_id, text=f'{connected_devices[home_id][node_id]}')
+                    context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {[device for device in connected_devices if device.location == home_id and device.node_id == node_id]}}}')
                 else:
-                    context.bot.send_message(chat_id=chat_id, text=f'{connected_devices[home_id][node_id][device_id]}')
+                    index = connected_devices.index(Device(home_id, node_id, device_id, None, None))
+                    context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {connected_devices[index]}}}')
     elif action == 'subscribe':
         requests = params.split('?')[1:]
         if len(requests) == 0:
