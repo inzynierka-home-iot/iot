@@ -1,14 +1,15 @@
 import json
+from device_action_mapper import obtain_action_types
 
 class Device:
 
-    def __init__(self, home_id, node_id, device_id, device_type, description):
-        self.location = home_id
+    def __init__(self, location, node_id, device_id, device_type, description):
+        self.location = location
         self.node_id = node_id
         self.device_id = device_id
         self.device_type = device_type
-        self.description = description
-        self.values = {}
+        self.name = description
+        self.values = obtain_action_types(device_type)
 
     def __eq__(self, other):
         return self.location == other.location and self.node_id == other.node_id and self.device_id == other.device_id
@@ -19,7 +20,8 @@ class Device:
             'nodeId': self.node_id,
             'id': self.device_id,
             'type': self.device_type,
-            'name': self.description,
+            'name': self.name,
+            'values': {k: v[0] for k, v in self.values.items()}
         }
         return json.dumps(value)
 
@@ -29,7 +31,8 @@ class Device:
             'nodeId': self.node_id,
             'id': self.device_id,
             'type': self.device_type,
-            'name': self.description,
+            'name': self.name,
+            'values': {k: v[0] for k, v in self.values.items()}
         }
         return json.dumps(value)
 
