@@ -1,19 +1,37 @@
+import json
+
 class Device:
 
     def __init__(self, home_id, node_id, device_id, device_type, description):
-        self.home_id = home_id
+        self.location = home_id
         self.node_id = node_id
         self.device_id = device_id
         self.device_type = device_type
         self.description = description
         self.values = {}
 
+    def __eq__(self, other):
+        return self.location == other.location and self.node_id == other.node_id and self.device_id == other.device_id
 
     def __str__(self):
-        return f'{self.home_id}/{self.node_id}/{self.device_id}/{self.device_type}/{self.description}'
+        value = {
+            'location': self.location,
+            'nodeId': self.node_id,
+            'id': self.device_id,
+            'type': self.device_type,
+            'name': self.description,
+        }
+        return json.dumps(value)
 
     def __repr__(self):
-        return f'{self.home_id}/{self.node_id}/{self.device_id}/{self.device_type}/{self.description}'
+        value = {
+            'location': self.location,
+            'nodeId': self.node_id,
+            'id': self.device_id,
+            'type': self.device_type,
+            'name': self.description,
+        }
+        return json.dumps(value)
 
     def update_value(self, value_type, value):
         if value_type in self.values.keys():

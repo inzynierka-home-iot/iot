@@ -1,1 +1,1 @@
-connected_devices = {}
+connected_devices = []

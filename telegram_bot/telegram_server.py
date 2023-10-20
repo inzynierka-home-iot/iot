@@ -68,13 +68,19 @@ def subscribe(client, topics):
         global connected_devices
         home, node, device, command, ack, t = msg.topic.split('/')
         home = home.split('-out')[0]
+        device = Device(home, node, device, list(DeviceType)[int(t)].name, msg.payload.decode())
         if command == '0':
-            connected_devices[f'{home}/{node}/{device}'] = Device(home, node, device, list(DeviceType)[int(t)].name, msg.payload.decode())
+            if device in connected_devices:
+                index = connected_devices.index(device)
+                connected_devices[index] = device
+            else:
+                connected_devices.append(device)
         elif command == '1':
-            if f'{home}/{node}/{device}' in connected_devices:
-                connected_devices[f'{home}/{node}/{device}'].update_value(list(ActionType)[int(t)].name, msg.payload.decode())
-                if connected_devices[f'{home}/{node}/{device}'].values[list(ActionType)[int(t)].name][1]:
-                    bot.send_message(chat_id=chat_id, text=f'{connected_devices[f"{home}/{node}/{device}"].get_value(list(ActionType)[int(t)].name)}')
+            if device in connected_devices:
+                index = connected_devices.index(device)
+                connected_devices[index].update_value(list(ActionType)[int(t)].name, msg.payload.decode())
+                if connected_devices[index].values[list(ActionType)[int(t)].name][1]:
+                    bot.send_message(chat_id=chat_id, text=f'{connected_devices[index].get_value(list(ActionType)[int(t)].name)}')
 
     client.subscribe(topics)
     client.on_message = on_message
@@ -91,12 +97,14 @@ def handle_message(update: Update, context: CallbackContext):
     if action == 'status':
         response = f'{{ device: "{home_id}/{node_id}/{device_id}"'
         requests = params.split('?')[1:]
+        device = Device(home_id, node_id, device_id, None, None)
+        index = connected_devices.index(device)
 
         if len(requests) == 0:
-            response += connected_devices[f'{home_id}/{node_id}/{device_id}'].get_value()
+            response += connected_devices[index].get_value()
         else:
             for request in requests:
-                response += connected_devices[f'{home_id}/{node_id}/{device_id}'].get_value(request)
+                response += connected_devices[index].get_value(request)
 
         response += ' }'
 
@@ -105,7 +113,7 @@ def handle_message(update: Update, context: CallbackContext):
         publish_message(client, home_id, node_id, device_id, True, params)
     elif action == 'get':
         if home_id == '*':
-            context.bot.send_message(chat_id=chat_id, text=f'{connected_devices}')
+            context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {connected_devices}}}')
         else:
             if node_id == '*':
                 context.bot.send_message(chat_id=chat_id, text=f'{connected_devices[home_id]}')
