@@ -57,8 +57,10 @@ def publish_message(client, home_id, node_id, device_id, set, params):
         status = result[0]
         if status == 0:
             print(f'Send `{action_value}` to topic `{topic}`')
+            return True
         else:
             print(f'Failed to send message to topic `{topic}`')
+            return False
 
 
 def subscribe(client, topics):
@@ -110,7 +112,11 @@ def handle_message(update: Update, context: CallbackContext):
 
         context.bot.send_message(chat_id=chat_id, text=response)
     elif action == 'set':
-        publish_message(client, home_id, node_id, device_id, True, params)
+        result = publish_message(client, home_id, node_id, device_id, True, params)
+        if result:
+            context.bot.send_message(chat_id=chat_id, text=f'"req": "{message_text}", "res": "{{"status": true}}"')
+        else:
+            context.bot.send_message(chat_id=chat_id, text=f'"req": "{message_text}", "res": "{{"status": false}}"')
     elif action == 'get':
         if home_id == '*':
             context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {connected_devices}}}')
