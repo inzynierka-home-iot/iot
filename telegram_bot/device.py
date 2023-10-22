@@ -45,14 +45,9 @@ class Device:
         else:
             self.values[value_type] = (value, False)
 
-    def get_value(self, value_type=None):
-        if value_type is None:
-            response = ''
-            for value_type in self.values:
-                response += f', {value_type}: {self.values[value_type][0]}'
-            return response
-
-        return f', {value_type}: {self.values[value_type][0]}' if value_type in self.values else None
+    def get_value(self, value_types=None):
+        values = {k: v[0] for k, v in self.values.items()} if value_types is None else {k: v[0] for k, v in self.values.items() if k in value_types}
+        return json.dumps(values) if len(values) > 0 else {"status": False}
 
 
     def subscribe(self, value_type=None):

@@ -103,20 +103,18 @@ def handle_message(update: Update, context: CallbackContext):
     _, home_id, node_id, device_id, action, params = message_text.split('/')
 
     if action == 'status':
-        response = f'{{ device: "{home_id}/{node_id}/{device_id}"'
         requests = params.split('?')[1:]
         device = Device(home_id, node_id, device_id, None, None)
-        index = connected_devices.index(device)
 
-        if len(requests) == 0:
-            response += connected_devices[index].get_value()
+        if home_id != '*' and node_id != '*' and device_id != '*' and device in connected_devices:
+            index = connected_devices.index(device)
+            if len(requests) == 0:
+                response = connected_devices[index].get_value()
+            else:
+                response = connected_devices[index].get_value(requests)
+            context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {response}}}')
         else:
-            for request in requests:
-                response += connected_devices[index].get_value(request)
-
-        response += ' }'
-
-        context.bot.send_message(chat_id=chat_id, text=response)
+            context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
     elif action == 'set':
         result = True
         action_param = params.split('?')[1]
@@ -150,8 +148,12 @@ def handle_message(update: Update, context: CallbackContext):
                 if device_id == '*':
                     context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {[device for device in connected_devices if device.location == home_id and device.node_id == node_id]}}}')
                 else:
-                    index = connected_devices.index(Device(home_id, node_id, device_id, None, None))
-                    context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {connected_devices[index]}}}')
+                    device = Device(home_id, node_id, device_id, None, None)
+                    if device in connected_devices:
+                        index = connected_devices.index(Device(home_id, node_id, device_id, None, None))
+                        context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {connected_devices[index]}}}')
+                    else:
+                        context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
     elif action == 'subscribe':
         requests = params.split('?')[1:]
         if len(requests) == 0:
