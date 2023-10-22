@@ -1,6 +1,8 @@
 import logging
 import env
 import telegram
+import time
+import threading
 from telegram import Update
 from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
 from paho.mqtt import client as mqtt_client
@@ -24,10 +26,10 @@ connected_devices = connected_devices
 def connect_mqtt(broker) -> mqtt_client:
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
-            print('Connected to MQTT Broker!')
+            logging.log(logging.INFO, 'Connected to MQTT Broker!')
             subscribe(client, [('home-1-out/#', 0), ('home-1-in/#', 0)])
         else:
-            print('Failed to connect, return code %d\n', rc)
+            logging.log(logging.ERROR, f'Failed to connect, return code {rc}\n')
 
     client = mqtt_client.Client(client_id)
     client.on_connect = on_connect
@@ -42,9 +44,9 @@ def publish_raw(client, msg):
     # result: [0, 1]
     status = result[0]
     if status == 0:
-        print(f'Send `{msg}` to topic `{topic}`')
+        logging.log(logging.INFO, f'Send `{msg}` to topic `{topic}`')
     else:
-        print(f'Failed to send message to topic `{topic}`')
+        logging.log(logging.ERROR, f'Failed to send message to topic `{topic}`')
 
 def publish_message(client, home_id, node_id, device_id, set, action_params):
     action_name = action_params.split('=')[0]
@@ -54,10 +56,10 @@ def publish_message(client, home_id, node_id, device_id, set, action_params):
     # result: [0, 1]
     status = result[0]
     if status == 0:
-        print(f'Send `{action_value}` to topic `{topic}`')
+        logging.log(logging.INFO, f'Send `{action_value}` to topic `{topic}`')
         return True
     else:
-        print(f'Failed to send message to topic `{topic}`')
+        logging.log(logging.ERROR, f'Failed to send message to topic `{topic}`')
         return False
 
 
@@ -66,21 +68,27 @@ def subscribe(client, topics):
 
     def on_message(client, userdata, msg):
         global connected_devices
-        home, node, device, command, ack, t = msg.topic.split('/')
-        home = home.split('-out')[0]
-        device = Device(home, node, device, list(DeviceType)[int(t)].name, msg.payload.decode())
+        location, node_id, device_id, command, ack, type_id = msg.topic.split('/')
+        location = location.split('-out')[0]
+        device = Device(location, node_id, device_id, list(DeviceType)[int(type_id)].name, msg.payload.decode())
         if command == '0':
             if device in connected_devices:
                 index = connected_devices.index(device)
                 connected_devices[index] = device
             else:
                 connected_devices.append(device)
+                bot.send_message(chat_id=chat_id, text=f'{{"req": "/{location}/{node_id}/{device_id}/connected/", "res": {{"device": {device}}}}}')
         elif command == '1':
             if device in connected_devices:
                 index = connected_devices.index(device)
-                connected_devices[index].update_value(list(ActionType)[int(t)].name, msg.payload.decode())
-                if connected_devices[index].values[list(ActionType)[int(t)].name][1]:
-                    bot.send_message(chat_id=chat_id, text=f'{connected_devices[index].get_value(list(ActionType)[int(t)].name)}')
+                connected_devices[index].update_value(list(ActionType)[int(type_id)].name, msg.payload.decode())
+                if connected_devices[index].values[list(ActionType)[int(type_id)].name][1]:
+                    bot.send_message(chat_id=chat_id, text=f'{connected_devices[index].get_value(list(ActionType)[int(type_id)].name)}')
+        elif command == '3':
+            if type_id == '22':
+                node_devices = [d for d in connected_devices if d.location == location and d.node_id == node_id]
+                for node_device in node_devices:
+                    node_device.update_last_seen()
 
     client.subscribe(topics)
     client.on_message = on_message
@@ -163,6 +171,19 @@ def handle_message(update: Update, context: CallbackContext):
     else:
         context.bot.send_message(chat_id=chat_id, text='Unknown command')
 
+def check_connected():
+    bot = telegram.Bot(token=env.TELEGRAM_BOT_TOKEN)
+
+    while True:
+        for device in connected_devices:
+            publish_raw(client, f'{device.location}-in/{device.node_id}/{device.device_id}/3/0/18:0')
+        for device in connected_devices:
+            if time.time() - device.last_seen > 120:
+                connected_devices.remove(device)
+                bot.send_message(chat_id=chat_id, text=f'{{"req": "/{device.location}/{device.node_id}/{device.device_id}/disconnected/", "res": {{"device": {device}}}}}')
+        time.sleep(30)
+
+
 
 if __name__ == '__main__':
     updater = Updater(token=env.TELEGRAM_BOT_TOKEN)
@@ -171,5 +192,7 @@ if __name__ == '__main__':
     client.loop_start()
 
     dispatcher.add_handler(MessageHandler(Filters.text, handle_message))
+    t = threading.Thread(target=check_connected)
+    t.start()
 
     updater.start_polling()
