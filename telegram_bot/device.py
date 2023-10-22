@@ -1,4 +1,6 @@
 import json
+import time
+
 from device_action_mapper import obtain_action_types
 
 class Device:
@@ -10,6 +12,7 @@ class Device:
         self.device_type = device_type
         self.name = description
         self.values = obtain_action_types(device_type)
+        self.last_seen = time.time()
 
     def __eq__(self, other):
         return self.location == other.location and self.node_id == other.node_id and self.device_id == other.device_id
@@ -66,3 +69,6 @@ class Device:
                 self.values[value_type] = (self.values[value_type][0], False)
         else:
             self.values[value_type] = (self.values[value_type][0], False)
+
+    def update_last_seen(self):
+        self.last_seen = time.time()
