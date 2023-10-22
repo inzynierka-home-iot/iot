@@ -100,6 +100,9 @@ def handle_message(update: Update, context: CallbackContext):
     message_text = update.message.text
     logging.log(logging.INFO, f'Received from app: {message_text}')
 
+    if message_text.count('/') < 5:
+        context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+        return
     _, home_id, node_id, device_id, action, params = message_text.split('/')
 
     if action == 'status':
@@ -129,26 +132,29 @@ def handle_message(update: Update, context: CallbackContext):
         else:
             context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
     elif action == 'set':
-        result = True
-        action_param = params.split('?')[1]
-        action_type = action_param.split('=')[0]
-        possible_devices = [device for device in connected_devices if action_type in device.values]
-        if home_id == '*':
-            for device in possible_devices:
-                result = result and publish_message(client, device.location, device.node_id, device.device_id, True, action_param)
-        else:
-            if node_id == '*':
-                for device in [device for device in possible_devices if device.location == home_id]:
+        if params.strip():
+            result = True
+            action_param = params.split('?')[1]
+            action_type = action_param.split('=')[0]
+            possible_devices = [device for device in connected_devices if action_type in device.values]
+            if home_id == '*':
+                for device in possible_devices:
                     result = result and publish_message(client, device.location, device.node_id, device.device_id, True, action_param)
             else:
-                if device_id == '*':
-                    for device in [device for device in possible_devices if device.location == home_id and device.node_id == node_id]:
+                if node_id == '*':
+                    for device in [device for device in possible_devices if device.location == home_id]:
                         result = result and publish_message(client, device.location, device.node_id, device.device_id, True, action_param)
                 else:
-                    result = publish_message(client, home_id, node_id, device_id, True, action_param)
+                    if device_id == '*':
+                        for device in [device for device in possible_devices if device.location == home_id and device.node_id == node_id]:
+                            result = result and publish_message(client, device.location, device.node_id, device.device_id, True, action_param)
+                    else:
+                        result = publish_message(client, home_id, node_id, device_id, True, action_param)
 
-        if result:
-            context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": true}}}}')
+            if result:
+                context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": true}}}}')
+            else:
+                context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
         else:
             context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
     elif action == 'get':
