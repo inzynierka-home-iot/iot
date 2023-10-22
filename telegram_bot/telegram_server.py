@@ -115,6 +115,19 @@ def handle_message(update: Update, context: CallbackContext):
             context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {response}}}')
         else:
             context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+    elif action == 'statusAll':
+        if params.strip():
+            value_type = params.split('?')[1]
+            device = Device(home_id, node_id, device_id, None, None)
+
+            if home_id != '*' and node_id != '*' and device_id != '*' and device in connected_devices:
+                index = connected_devices.index(device)
+                response = connected_devices[index].get_historical_values(value_type)
+                context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {response}}}')
+            else:
+                context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+        else:
+            context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
     elif action == 'set':
         result = True
         action_param = params.split('?')[1]
