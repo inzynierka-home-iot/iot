@@ -7,9 +7,9 @@
 #define PUBLISH_TOPIC_PREFIX "home-1-out"
 #define SUBSCRIBE_TOPIC_PREFIX "home-1-in"
 
-const char* ssid = "";
-const char* password = "";
-const char* mqtt_server = "";
+const char* ssid = ""; // wifi network ssid
+const char* password = ""; // wifi network password
+const char* mqtt_server = ""; // raspberrypi ip address
 const char* deviceName = "node-1"; 
 
 const int ledPinGreen = 15;
@@ -31,6 +31,29 @@ char msgBuff[30];
 char topicBuff[30];
 bool lockStatus = false;
 
+void present_initial_values() {
+  sprintf(topicBuff, "%s/1/0/1/0/2", PUBLISH_TOPIC_PREFIX);
+  sprintf(msgBuff, "%d", digitalRead(ledPinGreen));
+  client.publish(topicBuff, msgBuff);
+
+  DS18B20.requestTemperatures();
+  tempC = DS18B20.getTempCByIndex(0);
+  sprintf(topicBuff, "%s/1/1/1/0/0", PUBLISH_TOPIC_PREFIX);
+  sprintf(msgBuff, "%f", tempC);
+  client.publish(topicBuff, msgBuff);
+
+  sprintf(topicBuff, "%s/1/2/1/0/2", PUBLISH_TOPIC_PREFIX);
+  sprintf(msgBuff, "%d", digitalRead(ledPinYellow));
+  client.publish(topicBuff, msgBuff);
+
+  sprintf(topicBuff, "%s/1/3/1/0/2", PUBLISH_TOPIC_PREFIX);
+  sprintf(msgBuff, "%d", digitalRead(ledPinRed));
+  client.publish(topicBuff, msgBuff);
+
+  sprintf(topicBuff, "%s/1/4/1/0/36", PUBLISH_TOPIC_PREFIX);
+  client.publish(topicBuff, lockStatus ? "1" : "0");
+}
+
 void presentation() {
   sprintf(topicBuff, "%s/1/0/0/0/3", PUBLISH_TOPIC_PREFIX);
   client.publish(topicBuff, "Green LED");
@@ -42,6 +65,8 @@ void presentation() {
   client.publish(topicBuff, "Red LED");
   sprintf(topicBuff, "%s/1/4/0/0/19", PUBLISH_TOPIC_PREFIX);
   client.publish(topicBuff, "Button");
+
+  present_initial_values();
 }
 
 void reconnect() {
@@ -75,12 +100,21 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
   // set
   if (topic == "home-1-in/1/0/1/0/2") {
     digitalWrite(ledPinGreen, payloadString == "1" ? HIGH : LOW);
+    sprintf(topicBuff, "%s/1/0/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(msgBuff, "%d", digitalRead(ledPinGreen));
+    client.publish(topicBuff, msgBuff);
   }
   if (topic == "home-1-in/1/2/1/0/2") {
     digitalWrite(ledPinYellow, payloadString == "1" ? HIGH : LOW);
+    sprintf(topicBuff, "%s/1/2/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(msgBuff, "%d", digitalRead(ledPinYellow));
+    client.publish(topicBuff, msgBuff);
   }
   if (topic == "home-1-in/1/3/1/0/2") {
     digitalWrite(ledPinRed, payloadString == "1" ? HIGH : LOW);
+    sprintf(topicBuff, "%s/1/3/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(msgBuff, "%d", digitalRead(ledPinRed));
+    client.publish(topicBuff, msgBuff);
   }
 
   // request
@@ -110,6 +144,28 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
     sprintf(topicBuff, "%s/1/4/1/0/36", PUBLISH_TOPIC_PREFIX);
     client.publish(topicBuff, lockStatus ? "1" : "0");
   }
+
+  // heartbeat
+  if (topic == "home-1-in/1/0/3/0/18") {
+    sprintf(topicBuff, "%s/1/0/3/0/22", PUBLISH_TOPIC_PREFIX);
+    client.publish(topicBuff, "");
+  }
+  if (topic == "home-1-in/1/1/3/0/18") {
+    sprintf(topicBuff, "%s/1/1/3/0/22", PUBLISH_TOPIC_PREFIX);
+    client.publish(topicBuff, "");
+  }
+  if (topic == "home-1-in/1/2/3/0/18") {
+    sprintf(topicBuff, "%s/1/2/3/0/22", PUBLISH_TOPIC_PREFIX);
+    client.publish(topicBuff, "");
+  }
+  if (topic == "home-1-in/1/3/3/0/18") {
+    sprintf(topicBuff, "%s/1/3/3/0/22", PUBLISH_TOPIC_PREFIX);
+    client.publish(topicBuff, "");
+  }
+  if (topic == "home-1-in/1/4/3/0/18") {
+    sprintf(topicBuff, "%s/1/4/3/0/22", PUBLISH_TOPIC_PREFIX);
+    client.publish(topicBuff, "");
+  }
 }
 
 void setUpWifi() {
@@ -119,6 +175,8 @@ void setUpWifi() {
   Serial.println(ssid);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
+    Serial.print("Connecting with ");
+    Serial.println(ssid);
     delay(500);
     Serial.print(".");
   }
