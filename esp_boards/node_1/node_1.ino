@@ -7,9 +7,9 @@
 #define PUBLISH_TOPIC_PREFIX "home-1-out"
 #define SUBSCRIBE_TOPIC_PREFIX "home-1-in"
 
-const char* ssid = ""; // wifi network ssid
-const char* password = ""; // wifi network password
-const char* mqtt_server = ""; // raspberrypi ip address
+const char* ssid = "Orange_Swiatlowod_0030"; // wifi network ssid
+const char* password = "3LXSZWVKCRGY"; // wifi network password
+const char* mqtt_server = "192.168.1.52"; // raspberrypi ip address
 const char* deviceName = "node-1"; 
 
 const int ledPinGreen = 15;
@@ -17,7 +17,7 @@ const int ledPinYellow = 22;
 const int ledPinRed = 23;
 const int buttonPin = 21;
 const int tempPin = 2;
-const int tempDelay = 5000;
+const int tempDelay = 15000;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -227,7 +227,11 @@ void buttonLoop() {
     Serial.println("Button pressed");
   }
 }
-
+// void keepConnected(){
+//   for (;;;){
+//     presentation();
+//   }
+// }
 void loop() {
   buttonLoop();
   tempLoop();

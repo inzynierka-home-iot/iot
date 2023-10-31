@@ -7,9 +7,9 @@
 #define PUBLISH_TOPIC_PREFIX "home-1-out"
 #define SUBSCRIBE_TOPIC_PREFIX "home-1-in"
 
-const char* ssid = ""; // wifi network ssid
-const char* password = ""; // wifi network password
-const char* mqtt_server = ""; // raspberrypi ip address
+const char* ssid = "Orange_Swiatlowod_0030"; // wifi network ssid
+const char* password = "3LXSZWVKCRGY"; // wifi network password
+const char* mqtt_server = "192.168.1.52"; // raspberrypi ip address
 const char* deviceName = "node-2"; 
 
 const int ledPinYellow = 23;
@@ -22,7 +22,7 @@ char msgBuff[30];
 char topicBuff[30];
 
 void present_initial_values() {
-  sprintf(topicBuff, "%s/1/0/1/0/2", PUBLISH_TOPIC_PREFIX);
+  sprintf(topicBuff, "%s/2/0/1/0/2", PUBLISH_TOPIC_PREFIX);
   sprintf(msgBuff, "%d", digitalRead(ledPinYellow));
   client.publish(topicBuff, msgBuff);
 }
@@ -65,14 +65,14 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
   // set
   if (topic == "home-1-in/2/0/1/0/2") {
     digitalWrite(ledPinYellow, payloadString == "1" ? HIGH : LOW);
-    sprintf(topicBuff, "%s/1/0/1/0/2", PUBLISH_TOPIC_PREFIX); 
+    sprintf(topicBuff, "%s/2/0/1/0/2", PUBLISH_TOPIC_PREFIX); 
     sprintf(msgBuff, "%d", digitalRead(ledPinYellow));
     client.publish(topicBuff, msgBuff);
   }
 
   // request
   if (topic == "home-1-in/2/0/2/0/2") {
-    sprintf(topicBuff, "%s/1/0/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(topicBuff, "%s/2/0/1/0/2", PUBLISH_TOPIC_PREFIX);
     sprintf(msgBuff, "%d", digitalRead(ledPinYellow));
     client.publish(topicBuff, msgBuff);
   }
