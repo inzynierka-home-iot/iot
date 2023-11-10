@@ -299,7 +299,11 @@ void buttonLoop() {
     Serial.println("Button pressed");
   }
 }
-
+// void keepConnected(){
+//   for (;;;){
+//     presentation();
+//   }
+// }
 void loop() {
   buttonLoop();
   tempLoop();
