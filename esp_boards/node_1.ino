@@ -155,11 +155,12 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
     Serial.println(fanTempValue);
   }
   if (topic == "home-1-in/1/5/1/0/3") {
-    fanSpeedValue = (int) 2.5 * payloadString.toInt();
+    fanSpeedValue = (int) (2.5 * payloadString.toInt());
     analogWrite(fanSpeedPin, fanSpeedValue);
     sprintf(topicBuff, "%s/1/5/1/0/3", PUBLISH_TOPIC_PREFIX);
     sprintf(msgBuff, "%d", (int) (fanSpeedValue / 2.5));
     client.publish(topicBuff, msgBuff);
+
   }
   if (topic == "home-1-in/1/5/1/0/10") {
     fanDirectionValue = payloadString.toInt();
