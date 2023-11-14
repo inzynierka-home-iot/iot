@@ -230,10 +230,10 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str=None):
             for device in connected_devices:
                 if device.location == home_id and device.node_id == node_id and device.device_id == device_id:
                     if requests == "action=remove":
-                        device.update_value("schedule", dict())
+                        device.update_schedule( dict())
                     else:
                         readable_schedule=generate_redable_scheduler(home_id,node_id,device_id,requests)
-                        device.update_value("schedule", readable_schedule)
+                        device.update_schedule( readable_schedule)
                 
         except Exception as err: 
             print(repr(err))
