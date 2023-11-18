@@ -25,7 +25,7 @@ device_action_dict = {
     DeviceType.S_IR.name: [ActionType.V_IR_SEND.name, ActionType.V_IR_RECEIVE.name, ActionType.V_IR_RECORD.name],
     DeviceType.S_WATER.name: [ActionType.V_FLOW.name, ActionType.V_VOLUME.name],
     DeviceType.S_AIR_QUALITY.name: [ActionType.V_LEVEL.name, ActionType.V_UNIT_PREFIX.name],
-    DeviceType.S_CUSTOM.name: [],
+    DeviceType.S_CUSTOM.name: [ActionType.V_STATUS.name],
     DeviceType.S_DUST.name: [ActionType.V_LEVEL.name, ActionType.V_UNIT_PREFIX.name],
     DeviceType.S_SCENE_CONTROLLER.name: [ActionType.V_SCENE_ON.name, ActionType.V_SCENE_OFF.name],
     DeviceType.S_RGB_LIGHT.name: [ActionType.V_RGB.name, ActionType.V_WATT.name],
@@ -41,7 +41,8 @@ device_action_dict = {
     DeviceType.S_INFO.name: [ActionType.V_TEXT.name],
     DeviceType.S_GAS.name: [ActionType.V_FLOW.name, ActionType.V_VOLUME.name],
     DeviceType.S_GPS.name: [ActionType.V_POSITION.name],
-    DeviceType.S_WATER_QUALITY.name: [ActionType.V_TEMP.name, ActionType.V_PH.name, ActionType.V_ORP.name, ActionType.V_EC.name, ActionType.V_STATUS.name]
+    DeviceType.S_WATER_QUALITY.name: [ActionType.V_TEMP.name, ActionType.V_PH.name, ActionType.V_ORP.name, ActionType.V_EC.name, ActionType.V_STATUS.name],
+    DeviceType.S_FAN.name: [ActionType.V_TEMP.name, ActionType.V_PERCENTAGE.name, ActionType.V_DIRECTION.name]
 }
 
 def get_action_types(device_type):
