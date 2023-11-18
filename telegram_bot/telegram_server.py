@@ -2,6 +2,7 @@ import logging
 import env
 import telegram
 import time
+import json
 import threading
 from telegram import Update
 from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
@@ -9,6 +10,7 @@ from paho.mqtt import client as mqtt_client
 from device import Device
 from device_types import DeviceType
 from action_types import ActionType
+from scheduler import generate_new_schedule, generate_redable_scheduler
 import connected_devices
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -47,7 +49,16 @@ def publish_raw(client, msg):
         logging.log(logging.INFO, f'Send `{msg}` to topic `{topic}`')
     else:
         logging.log(logging.ERROR, f'Failed to send message to topic `{topic}`')
-
+def publish_to_nodeRED(topic,msg):
+    result = client.publish("nodeRED/"+topic, msg)
+    status = result[0]
+    if status == 0:
+        logging.log(logging.INFO, f'Send `{msg}` to topic nodeRED {topic}')
+        return True
+    else:
+        logging.log(logging.ERROR, f'Failed to send message to topic nodeRED `{topic}`')
+        return False
+    
 def publish_message(client, home_id, node_id, device_id, set, action_params):
     action_name = action_params.split('=')[0]
     action_value = action_params.split('=')[1]
@@ -173,7 +184,6 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str=None):
                                 response = False
                             result = publish_message(client, home_id, node_id, device_id, True, action_param)
             if response:
-                print("Res: ", result)
                 if result:
                     bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": true}}}}')
                 else:
@@ -210,6 +220,25 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str=None):
         else:
             for request in requests:
                 connected_devices[f'{home_id}/{node_id}/{device_id}'].unsubscribe(request)
+    elif action == 'setSchedule':
+        requests = params.split('?')[1]
+        try:
+            schedule = generate_new_schedule(home_id,node_id,device_id,requests)
+            schedule_json =  json.dumps(schedule)
+            publish_to_nodeRED("updateSchedule",schedule_json)
+                
+            for device in connected_devices:
+                if device.location == home_id and device.node_id == node_id and device.device_id == device_id:
+                    if requests == "action=remove":
+                        device.update_schedule( dict())
+                    else:
+                        readable_schedule=generate_redable_scheduler(home_id,node_id,device_id,requests)
+                        device.update_schedule( readable_schedule)
+                
+        except Exception as err: 
+            print(repr(err))
+            bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+        
     elif action == 'raw':
         publish_raw(client, message_text)
     else:
