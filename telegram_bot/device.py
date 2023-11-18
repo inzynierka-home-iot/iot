@@ -7,13 +7,14 @@ from device_action_mapper import obtain_action_types
 
 class Device:
 
-    def __init__(self, location, node_id, device_id, device_type, description):
+    def __init__(self, location, node_id, device_id, device_type, description, schedule=dict()):
         self.location = location
         self.node_id = node_id
         self.device_id = device_id
         self.device_type = device_type
         self.name = description
         self.values = obtain_action_types(device_type)
+        self.schedule = schedule
         self.last_seen = time.time()
 
     def __eq__(self, other):
@@ -26,6 +27,7 @@ class Device:
             'id': self.device_id,
             'type': self.device_type,
             'name': self.name,
+            'schedule':self.schedule,
             'values': {k: v[0] for k, v in self.values.items()}
         }
         return json.dumps(value)
@@ -37,6 +39,7 @@ class Device:
             'id': self.device_id,
             'type': self.device_type,
             'name': self.name,
+            'schedule':self.schedule,
             'values': {k: v[0] for k, v in self.values.items()}
         }
         return json.dumps(value)
@@ -55,6 +58,9 @@ class Device:
             buffer.append(json.dumps({'time': datetime.now().isoformat(), 'value': value}) + '\n')
         with open(f'sensor_data/{self.location}_{self.node_id}_{self.device_id}_{value_type}.txt', 'w') as f:
             f.writelines(buffer)
+
+    def update_schedule(self,schedule):
+        self.schedule = schedule
 
     def get_dump_values(self, value_types=None):
         values = {k: v[0] for k, v in self.values.items()} if value_types is None else {k: v[0] for k, v in self.values.items() if k in value_types}
