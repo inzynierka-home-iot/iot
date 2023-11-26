@@ -62,8 +62,8 @@ class Device:
     def update_schedule(self,schedule):
         self.schedule = schedule
 
-    def get_dump_values(self, value_types=None):
-        values = {k: v[0] for k, v in self.values.items()} if value_types is None else {k: v[0] for k, v in self.values.items() if k in value_types}
+    def get_dump_values(self, value_types):
+        values = {k: v[0] for k, v in self.values.items()} if len(value_types) == 0 else {k: v[0] for k, v in self.values.items() if k in value_types}
         return json.dumps(values) if len(values) > 0 else {"status": False}
 
     def get_value(self, value_type):

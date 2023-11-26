@@ -53,4 +53,4 @@ def obtain_action_types(device_type):
     if values is None:
         return {}
     else:
-        return {value: (None, False) for value in values}
+        return {value: (None, False, False) for value in values}

@@ -7,10 +7,10 @@ import threading
 from telegram import Update
 from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
 from paho.mqtt import client as mqtt_client
-from device import Device
-from device_types import DeviceType
-from action_types import ActionType
-from scheduler import generate_new_schedule, generate_redable_scheduler
+from telegram_bot.device import Device
+from telegram_bot.device_types import DeviceType
+from telegram_bot.action_types import ActionType
+from telegram_bot.scheduler import generate_new_schedule, generate_redable_scheduler
 import connected_devices
 
 logging.basicConfig(
@@ -64,9 +64,9 @@ def publish_to_nodeRED(topic, msg):
         return False
 
 
-def publish_message(client, home_id, node_id, device_id, set, action_params):
-    action_name = action_params.split('=')[0]
-    action_value = action_params.split('=')[1]
+def publish_message(client, home_id, node_id, device_id, set, action_param):
+    action_name = action_param.split('=')[0]
+    action_value = action_param.split('=')[1]
     topic = f'{home_id}-in/{node_id}/{device_id}/{"1" if set else "2"}/0/{ActionType[action_name].value[0]}'
     result = client.publish(topic, action_value)
     # result: [0, 1]
@@ -108,6 +108,11 @@ def subscribe(client, topics):
                 if connected_devices[index].values[list(ActionType)[int(type_id)].name][1]:
                     bot.send_message(chat_id=chat_id,
                                      text=f'{connected_devices[index].get_dump_values(list(ActionType)[int(type_id)].name)}')
+                # else:
+                #     req = connected_devices[index].values[list(ActionType)[int(type_id)].name][2]
+                #     if req is not None:
+                #         bot.send_message(chat_id=chat_id,
+                #                          text=f'{connected_devices[index].get_dump_values(list(ActionType)[int(type_id)].name)}')
         elif command == '3':
             if type_id == '22':
                 node_devices = [d for d in connected_devices if d.location == location and d.node_id == node_id]
@@ -132,134 +137,152 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
         logging.log(logging.INFO, f'Received from NodeRed: {message_text}')
 
     if message_text.count('/') < 5:
-        bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+        bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false, "message": "Invalid request"}}}}')
         return
     _, home_id, node_id, device_id, action, params = message_text.split('/')
 
-    if action == 'status':
-        requests = params.split('?')[1:]
-        device = Device(home_id, node_id, device_id, None, None)
-
-        if home_id != '*' and node_id != '*' and device_id != '*' and device in connected_devices:
-            index = connected_devices.index(device)
-            if len(requests) == 0:
-                response = connected_devices[index].get_dump_values()
-            else:
-                response = connected_devices[index].get_dump_values(requests)
-            bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {response}}}')
-        else:
-            bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
-    elif action == 'statusAll':
-        if params.strip():
-            value_type = params.split('?')[1]
+    match action:
+        case 'status':
+            requests = params.split('?')[1:]
             device = Device(home_id, node_id, device_id, None, None)
 
             if home_id != '*' and node_id != '*' and device_id != '*' and device in connected_devices:
                 index = connected_devices.index(device)
-                response = connected_devices[index].get_historical_values(value_type)
+                response = connected_devices[index].get_dump_values(requests)
                 bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {response}}}')
             else:
                 bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
-        else:
-            bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
-    elif action == 'set':
-        if params.strip():
-            result = True
-            response = True
-            action_param = params.split('?')[1]
-            action_type, action_payload = action_param.split('=')
-            possible_devices = [device for device in connected_devices if action_type in device.values]
-            if home_id == '*':
-                for device in possible_devices:
-                    if device.get_value(action_type) == action_payload:
-                        response = False
-                    result = result and publish_message(client, device.location, device.node_id, device.device_id, True,
-                                                        action_param)
-            else:
-                if node_id == '*':
-                    for device in [device for device in possible_devices if device.location == home_id]:
-                        if device.get_value(action_type) == action_payload:
-                            response = False
-                        result = result and publish_message(client, device.location, device.node_id, device.device_id,
-                                                            True, action_param)
-                else:
-                    if device_id == '*':
-                        for device in [device for device in possible_devices if
-                                       device.location == home_id and device.node_id == node_id]:
-                            if device.get_value(action_type) == action_payload:
-                                response = False
-                            result = result and publish_message(client, device.location, device.node_id,
-                                                                device.device_id, True, action_param)
-                    else:
-                        for device in [device for device in possible_devices if
-                                       device.location == home_id and device.node_id == node_id and device.device_id == device_id]:
-                            if device.get_value(action_type) == action_payload:
-                                response = False
-                            result = publish_message(client, home_id, node_id, device_id, True, action_param)
-            if response:
-                if result:
-                    bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": true}}}}')
+        case 'statusAll':
+            if params.strip():
+                value_types = params.split('?')
+                if len(value_types) != 2:
+                    bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+                    return
+
+                value_type = value_types[1]
+                device = Device(home_id, node_id, device_id, None, None)
+
+                if home_id != '*' and node_id != '*' and device_id != '*' and device in connected_devices:
+                    index = connected_devices.index(device)
+                    response = connected_devices[index].get_historical_values(value_type)
+                    bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {response}}}')
                 else:
                     bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
-        else:
-            bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
-    elif action == 'get':
-        if home_id == '*':
-            bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {connected_devices}}}')
-        else:
-            if node_id == '*':
-                bot.send_message(chat_id=chat_id,
-                                 text=f'{{"req": "{message_text}", "res": {[device for device in connected_devices if device.location == home_id]}}}')
             else:
-                if device_id == '*':
-                    bot.send_message(chat_id=chat_id,
-                                     text=f'{{"req": "{message_text}", "res": {[device for device in connected_devices if device.location == home_id and device.node_id == node_id]}}}')
+                bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+        case 'set':
+            if params.strip():
+                result = True
+                response = True
+                action_params = params.split('?')[1]
+                action_pairs = action_params.split('&')
+
+                if len(action_pairs) == 0:
+                    bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+                    return
+                elif len(action_pairs) == 1:
+                    action_type, action_payload = action_pairs[0].split('=')
+                    action_pair = action_pairs[0]
+
+                    possible_devices = [device for device in connected_devices if action_type in device.values]
+                    match home_id:
+                        case '*':
+                            for device in possible_devices:
+                                if device.get_value(action_type) == action_payload:
+                                    response = False
+                                result = result and publish_message(client, device.location, device.node_id, device.device_id, True,
+                                                                    action_pair)
+                        case _:
+                            match node_id:
+                                case '*':
+                                    for device in [device for device in possible_devices if device.location == home_id]:
+                                        if device.get_value(action_type) == action_payload:
+                                            response = False
+                                        result = result and publish_message(client, device.location, device.node_id,
+                                                                            device.device_id,
+                                                                            True, action_pair)
+                                case _:
+                                    match device_id:
+                                        case '*':
+                                            for device in [device for device in possible_devices if
+                                                           device.location == home_id and device.node_id == node_id]:
+                                                if device.get_value(action_type) == action_payload:
+                                                    response = False
+                                                result = result and publish_message(client, device.location, device.node_id,
+                                                                                    device.device_id, True, action_pair)
+                                        case _:
+                                            for device in [device for device in possible_devices if
+                                                           device.location == home_id and device.node_id == node_id and device.device_id == device_id]:
+                                                if device.get_value(action_type) == action_payload:
+                                                    response = False
+                                                result = publish_message(client, home_id, node_id, device_id, True, action_pair)
                 else:
                     device = Device(home_id, node_id, device_id, None, None)
-                    if device in connected_devices:
-                        index = connected_devices.index(Device(home_id, node_id, device_id, None, None))
-                        bot.send_message(chat_id=chat_id,
-                                         text=f'{{"req": "{message_text}", "res": {connected_devices[index]}}}')
+                    if home_id != '*' and node_id != '*' and device_id != '*' and device in connected_devices:
+                        for action_pair in action_pairs:
+                            result = result and publish_message(client, home_id, node_id, device_id, True, action_pair)
+                            print(result)
                     else:
+                        bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+
+                if nodeRed:
+                    if response:
                         bot.send_message(chat_id=chat_id,
-                                         text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
-    elif action == 'subscribe':
-        requests = params.split('?')[1:]
-        if len(requests) == 0:
-            connected_devices[f'{home_id}/{node_id}/{device_id}'].subscribe()
-        else:
-            for request in requests:
-                connected_devices[f'{home_id}/{node_id}/{device_id}'].subscribe(request)
-    elif action == 'unsubscribe':
-        requests = params.split('?')[1:]
-        if len(requests) == 0:
-            connected_devices[f'{home_id}/{node_id}/{device_id}'].unsubscribe()
-        else:
-            for request in requests:
-                connected_devices[f'{home_id}/{node_id}/{device_id}'].unsubscribe(request)
-    elif action == 'setSchedule':
-        requests = params.split('?')[1]
-        try:
-            schedule = generate_new_schedule(home_id, node_id, device_id, requests)
-            schedule_json = json.dumps(schedule)
-            publish_to_nodeRED("updateSchedule", schedule_json)
+                                         text=f'{{"req": "{message_text}", "res": {{"status": {"true" if result else "false"}}}}}')
+                else:
+                    bot.send_message(chat_id=chat_id,
+                                        text=f'{{"req": "{message_text}", "res": {{"status": {"true" if result else "false"}}}}}')
+            else:
+                bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+        case 'get':
+            match home_id:
+                case '*':
+                    bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {connected_devices}}}')
+                case _:
+                    match node_id:
+                        case '*':
+                            bot.send_message(chat_id=chat_id,
+                                             text=f'{{"req": "{message_text}", "res": {[device for device in connected_devices if device.location == home_id]}}}')
+                        case _:
+                            match device_id:
+                                case '*':
+                                    if device_id == '*':
+                                        bot.send_message(chat_id=chat_id,
+                                                         text=f'{{"req": "{message_text}", "res": {[device for device in connected_devices if device.location == home_id and device.node_id == node_id]}}}')
+                                case _:
+                                    device = Device(home_id, node_id, device_id, None, None)
+                                    if device in connected_devices:
+                                        index = connected_devices.index(Device(home_id, node_id, device_id, None, None))
+                                        bot.send_message(chat_id=chat_id,
+                                                         text=f'{{"req": "{message_text}", "res": {connected_devices[index]}}}')
+        case 'setSchedule':
+            requests = params.split('?')[1]
+            try:
+                schedule = generate_new_schedule(home_id, node_id, device_id, requests)
+                schedule_json = json.dumps(schedule)
+                publish_to_nodeRED("updateSchedule", schedule_json)
 
-            for device in connected_devices:
-                if device.location == home_id and device.node_id == node_id and device.device_id == device_id:
-                    if requests == "action=remove":
-                        device.update_schedule(dict())
-                    else:
-                        readable_schedule = generate_redable_scheduler(home_id, node_id, device_id, requests)
-                        device.update_schedule(readable_schedule)
+                for device in connected_devices:
+                    if device.location == home_id and device.node_id == node_id and device.device_id == device_id:
+                        if requests == "action=remove":
+                            device.update_schedule(dict())
+                        else:
+                            readable_schedule = generate_redable_scheduler(home_id, node_id, device_id, requests)
+                            device.update_schedule(readable_schedule)
 
-        except Exception as err:
-            print(repr(err))
-            bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+            except Exception as err:
+                print(repr(err))
+                bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+        case 'raw':
+            publish_raw(client, message_text)
+        case _:
+            bot.send_message(chat_id=chat_id, text='Unknown command')
 
-    elif action == 'raw':
-        publish_raw(client, message_text)
-    else:
-        bot.send_message(chat_id=chat_id, text='Unknown command')
+
+def error_handler(update: Update, context: CallbackContext) -> None:
+    logging.error(msg="Exception while handling an update:", exc_info=context.error)
+
+    context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{update.message.text}", "res": {{"status": false}}}}')
 
 
 def check_connected():
@@ -276,6 +299,14 @@ def check_connected():
         time.sleep(30)
 
 
+def update_values():
+    while True:
+        for device in connected_devices:
+            for value_type in device.values:
+                publish_raw(client, f'{device.location}-in/{device.node_id}/{device.device_id}/2/0/{ActionType[value_type].value[0]}:0')
+        time.sleep(3)
+
+
 if __name__ == '__main__':
     updater = Updater(token=env.TELEGRAM_BOT_TOKEN)
     dispatcher = updater.dispatcher
@@ -283,7 +314,10 @@ if __name__ == '__main__':
     client.loop_start()
 
     dispatcher.add_handler(MessageHandler(Filters.text, handle_message))
-    t = threading.Thread(target=check_connected)
-    t.start()
+    dispatcher.add_error_handler(error_handler)
+    con = threading.Thread(target=check_connected)
+    con.start()
+    upd = threading.Thread(target=update_values)
+    upd.start()
 
     updater.start_polling()
