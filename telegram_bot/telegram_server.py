@@ -4,6 +4,8 @@ import telegram
 import time
 import json
 import threading
+import subprocess
+import atexit
 from telegram import Update
 from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
 from paho.mqtt import client as mqtt_client
@@ -23,14 +25,14 @@ port = 1883
 client_id = 'python-mqtt'
 chat_id = env.TELEGRAM_USER_ID
 connected_devices = connected_devices.connected_devices
+location = env.LOCATION
 
 
 def connect_mqtt(broker) -> mqtt_client:
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
             logging.log(logging.INFO, 'Connected to MQTT Broker!')
-            subscribe(client, [('nodeRed/#', 0)
-                , ('home-1-out/#', 0), ('home-1-in/#', 0)])
+            subscribe(client, [('nodeRed/#', 0), (f'{location}-out/#', 0), (f'{location}-in/#', 0)])
         else:
             logging.log(logging.ERROR, f'Failed to connect, return code {rc}\n')
 
@@ -48,7 +50,8 @@ def publish_raw(client, msg):
     # result: [0, 1]
     status = result[0]
     if status == 0:
-        logging.log(logging.INFO, f'Send `{msg}` to topic `{topic}`')
+        # logging.log(logging.INFO, f'Send `{msg}` to topic `{topic}`')
+        pass
     else:
         logging.log(logging.ERROR, f'Failed to send message to topic `{topic}`')
 
@@ -309,6 +312,12 @@ def update_values():
         time.sleep(3)
 
 
+@atexit.register
+def shutdown():
+    subprocess.run('sudo systemctl stop mysgw.service', shell=True, text=True, check=True)
+    subprocess.run('node-red-stop', shell=True, text=True, check=True)
+
+
 if __name__ == '__main__':
     updater = Updater(token=env.TELEGRAM_BOT_TOKEN)
     dispatcher = updater.dispatcher
@@ -321,5 +330,8 @@ if __name__ == '__main__':
     con.start()
     upd = threading.Thread(target=update_values)
     upd.start()
+
+    subprocess.run('sudo systemctl restart mysgw.service', shell=True, text=True, check=True)
+    subprocess.run('node-red-restart', shell=True, text=True, check=True)
 
     updater.start_polling()
