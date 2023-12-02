@@ -18,6 +18,7 @@ const int redPin = 21;
 const int greenPin = 22;
 const int bluePin = 23;
 const int dhtPin = 32;
+const int ledPinRed = 15;
 
 int redValue = 5;
 int greenValue = 30;
@@ -63,6 +64,10 @@ void present_initial_values() {
   sprintf(topicBuff, "%s/2/1/1/0/1", PUBLISH_TOPIC_PREFIX);
   sprintf(msgBuff, "%f", humi);
   client.publish(topicBuff, msgBuff);
+
+  sprintf(topicBuff, "%s/2/2/1/0/2", PUBLISH_TOPIC_PREFIX);
+  sprintf(msgBuff, "%d", digitalRead(ledPinRed));
+  client.publish(topicBuff, msgBuff);
 }
 
 void presentation() {
@@ -70,6 +75,8 @@ void presentation() {
   client.publish(topicBuff, "RGB LED");
   sprintf(topicBuff, "%s/2/1/0/0/7", PUBLISH_TOPIC_PREFIX);
   client.publish(topicBuff, "Humidity sensor");
+  sprintf(topicBuff, "%s/2/2/0/0/3", PUBLISH_TOPIC_PREFIX);
+  client.publish(topicBuff, "Red LED");
 
   present_initial_values();
 }
@@ -114,6 +121,12 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
     get_hex_msg();
     client.publish(topicBuff, msgBuff);
   }
+  if (topic == "home-1-in/2/2/1/0/2") {
+    digitalWrite(ledPinRed, payloadString == "1" ? HIGH : LOW);
+    sprintf(topicBuff, "%s/2/2/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(msgBuff, "%d", digitalRead(ledPinRed));
+    client.publish(topicBuff, msgBuff);
+  }
 
   // request
   if (topic == "home-1-in/2/0/2/0/40") {
@@ -127,6 +140,11 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
     sprintf(msgBuff, "%f", humi);
     client.publish(topicBuff, msgBuff);
   }
+  if (topic == "home-1-in/2/2/2/0/2") {
+    sprintf(topicBuff, "%s/2/2/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(msgBuff, "%d", digitalRead(ledPinRed));
+    client.publish(topicBuff, msgBuff);
+  }
 
   // heartbeat
   if (topic == "home-1-in/2/0/3/0/18") {
@@ -135,6 +153,10 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
   }
   if (topic == "home-1-in/2/1/3/0/18") {
     sprintf(topicBuff, "%s/2/1/3/0/22", PUBLISH_TOPIC_PREFIX);
+    client.publish(topicBuff, "");
+  }
+  if (topic == "home-1-in/2/2/3/0/18") {
+    sprintf(topicBuff, "%s/1/3/3/0/22", PUBLISH_TOPIC_PREFIX);
     client.publish(topicBuff, "");
   }
 }
@@ -158,6 +180,7 @@ void setUpWifi() {
 
 void setup() {
   Serial.begin(115200);
+  pinMode(ledPinRed, OUTPUT);
   pinMode(redPin, OUTPUT);
   pinMode(greenPin, OUTPUT);
   pinMode(bluePin, OUTPUT);
