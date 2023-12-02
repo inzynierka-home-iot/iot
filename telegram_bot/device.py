@@ -27,7 +27,7 @@ class Device:
             'id': self.device_id,
             'type': self.device_type,
             'name': self.name,
-            'schedule':self.schedule,
+            'schedule': self.schedule,
             'values': {k: v[0] for k, v in self.values.items()}
         }
         return json.dumps(value)
@@ -39,7 +39,7 @@ class Device:
             'id': self.device_id,
             'type': self.device_type,
             'name': self.name,
-            'schedule':self.schedule,
+            'schedule': self.schedule,
             'values': {k: v[0] for k, v in self.values.items()}
         }
         return json.dumps(value)
@@ -49,28 +49,31 @@ class Device:
             self.values[value_type] = (value, self.values[value_type][1])
         else:
             self.values[value_type] = (value, False)
-        try:
-            with open(f'sensor_data/{self.location}_{self.node_id}_{self.device_id}_{value_type}.txt', 'r') as f:
-                buffer = deque(f.readlines(), maxlen=1000)
-            buffer.append(json.dumps({'time': datetime.now().isoformat(), 'value': value}) + '\n')
-        except:
-            buffer = deque()
-            buffer.append(json.dumps({'time': datetime.now().isoformat(), 'value': value}) + '\n')
-        with open(f'sensor_data/{self.location}_{self.node_id}_{self.device_id}_{value_type}.txt', 'w') as f:
-            f.writelines(buffer)
+
+    def save_values(self):
+        for value_type, value in self.values.items():
+            try:
+                with open(f'sensor_data/{self.location}_{self.node_id}_{self.device_id}_{value_type}.txt', 'r') as f:
+                    buffer = deque(f.readlines(), maxlen=1000)
+                buffer.append(json.dumps({'time': datetime.now().isoformat(), 'value': value[0]}) + '\n')
+            except:
+                buffer = deque()
+                buffer.append(json.dumps({'time': datetime.now().isoformat(), 'value': value[0]}) + '\n')
+            with open(f'sensor_data/{self.location}_{self.node_id}_{self.device_id}_{value_type}.txt', 'w') as f:
+                f.writelines(buffer)
 
     def update_schedule(self,schedule):
         self.schedule = schedule
 
-    def get_dump_values(self, value_types=None):
-        values = {k: v[0] for k, v in self.values.items()} if value_types is None else {k: v[0] for k, v in self.values.items() if k in value_types}
+    def get_dump_values(self, value_types):
+        values = {k: v[0] for k, v in self.values.items()} if len(value_types) == 0 else {k: v[0] for k, v in self.values.items() if k in value_types}
         return json.dumps(values) if len(values) > 0 else {"status": False}
 
     def get_value(self, value_type):
         if value_type in self.values.keys():
             if self.values[value_type] is not None:
                 return self.values[value_type][0]
-        return  {"status": False}
+        return {"status": False}
 
     def get_historical_values(self, value_type):
         with open(f'sensor_data/{self.location}_{self.node_id}_{self.device_id}_{value_type}.txt', 'r') as f:
