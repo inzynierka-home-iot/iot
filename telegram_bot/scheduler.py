@@ -75,3 +75,4 @@ def generate_redable_scheduler(home_id, node_id, device_id, payload):
         key, value = param.split("=")
         readable_schedule[key] = value
     return readable_schedule
+
