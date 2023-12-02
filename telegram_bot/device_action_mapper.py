@@ -42,7 +42,7 @@ device_action_dict = {
     DeviceType.S_GAS.name: [ActionType.V_FLOW.name, ActionType.V_VOLUME.name],
     DeviceType.S_GPS.name: [ActionType.V_POSITION.name],
     DeviceType.S_WATER_QUALITY.name: [ActionType.V_TEMP.name, ActionType.V_PH.name, ActionType.V_ORP.name, ActionType.V_EC.name, ActionType.V_STATUS.name],
-    DeviceType.S_FAN.name: [ActionType.V_TEMP.name, ActionType.V_PERCENTAGE.name, ActionType.V_DIRECTION.name]
+    DeviceType.S_FAN.name: [ActionType.V_TEMP.name, ActionType.V_PERCENTAGE.name, ActionType.V_DIRECTION.name, ActionType.V_STATUS.name]
 }
 
 def get_action_types(device_type):
@@ -53,4 +53,4 @@ def obtain_action_types(device_type):
     if values is None:
         return {}
     else:
-        return {value: (None, False, False) for value in values}
+        return {value: (None, False) for value in values}

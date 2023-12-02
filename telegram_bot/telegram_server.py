@@ -7,10 +7,10 @@ import threading
 from telegram import Update
 from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
 from paho.mqtt import client as mqtt_client
-from telegram_bot.device import Device
-from telegram_bot.device_types import DeviceType
-from telegram_bot.action_types import ActionType
-from telegram_bot.scheduler import generate_new_schedule, generate_redable_scheduler
+from device import Device
+from device_types import DeviceType
+from action_types import ActionType
+from scheduler import generate_new_schedule, generate_redable_scheduler
 import connected_devices
 
 logging.basicConfig(
@@ -64,9 +64,9 @@ def publish_to_nodeRED(topic, msg):
         return False
 
 
-def publish_message(client, home_id, node_id, device_id, set, action_param):
-    action_name = action_param.split('=')[0]
-    action_value = action_param.split('=')[1]
+def publish_message(client, home_id, node_id, device_id, set, action_params):
+    action_name = action_params.split('=')[0]
+    action_value = action_params.split('=')[1]
     topic = f'{home_id}-in/{node_id}/{device_id}/{"1" if set else "2"}/0/{ActionType[action_name].value[0]}'
     result = client.publish(topic, action_value)
     # result: [0, 1]
@@ -108,11 +108,6 @@ def subscribe(client, topics):
                 if connected_devices[index].values[list(ActionType)[int(type_id)].name][1]:
                     bot.send_message(chat_id=chat_id,
                                      text=f'{connected_devices[index].get_dump_values(list(ActionType)[int(type_id)].name)}')
-                # else:
-                #     req = connected_devices[index].values[list(ActionType)[int(type_id)].name][2]
-                #     if req is not None:
-                #         bot.send_message(chat_id=chat_id,
-                #                          text=f'{connected_devices[index].get_dump_values(list(ActionType)[int(type_id)].name)}')
         elif command == '3':
             if type_id == '22':
                 node_devices = [d for d in connected_devices if d.location == location and d.node_id == node_id]
@@ -149,6 +144,7 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
             if home_id != '*' and node_id != '*' and device_id != '*' and device in connected_devices:
                 index = connected_devices.index(device)
                 response = connected_devices[index].get_dump_values(requests)
+                connected_devices[index].save_values()
                 bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {response}}}')
             else:
                 bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
@@ -176,6 +172,7 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
                 response = True
                 action_params = params.split('?')[1]
                 action_pairs = action_params.split('&')
+                device_type = params.split('?')[2].split('TYPE=')[1] if len(params.split('?')) == 3 else None
 
                 if len(action_pairs) == 0:
                     bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
@@ -184,13 +181,14 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
                     action_type, action_payload = action_pairs[0].split('=')
                     action_pair = action_pairs[0]
 
-                    possible_devices = [device for device in connected_devices if action_type in device.values]
+                    possible_devices = [device for device in connected_devices if action_type in device.values and device_type == device.device_type] if device_type else [device for device in connected_devices if action_type in device.values]
                     match home_id:
                         case '*':
                             for device in possible_devices:
                                 if device.get_value(action_type) == action_payload:
                                     response = False
-                                result = result and publish_message(client, device.location, device.node_id, device.device_id, True,
+                                result = result and publish_message(client, device.location, device.node_id,
+                                                                    device.device_id, True,
                                                                     action_pair)
                         case _:
                             match node_id:
@@ -208,14 +206,16 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
                                                            device.location == home_id and device.node_id == node_id]:
                                                 if device.get_value(action_type) == action_payload:
                                                     response = False
-                                                result = result and publish_message(client, device.location, device.node_id,
+                                                result = result and publish_message(client, device.location,
+                                                                                    device.node_id,
                                                                                     device.device_id, True, action_pair)
                                         case _:
                                             for device in [device for device in possible_devices if
                                                            device.location == home_id and device.node_id == node_id and device.device_id == device_id]:
                                                 if device.get_value(action_type) == action_payload:
                                                     response = False
-                                                result = publish_message(client, home_id, node_id, device_id, True, action_pair)
+                                                result = publish_message(client, home_id, node_id, device_id, True,
+                                                                         action_pair)
                 else:
                     device = Device(home_id, node_id, device_id, None, None)
                     if home_id != '*' and node_id != '*' and device_id != '*' and device in connected_devices:
@@ -223,7 +223,8 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
                             result = result and publish_message(client, home_id, node_id, device_id, True, action_pair)
                             print(result)
                     else:
-                        bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+                        bot.send_message(chat_id=chat_id,
+                                         text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
 
                 if nodeRed:
                     if response:
@@ -231,7 +232,7 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
                                          text=f'{{"req": "{message_text}", "res": {{"status": {"true" if result else "false"}}}}}')
                 else:
                     bot.send_message(chat_id=chat_id,
-                                        text=f'{{"req": "{message_text}", "res": {{"status": {"true" if result else "false"}}}}}')
+                                     text=f'{{"req": "{message_text}", "res": {{"status": {"true" if result else "false"}}}}}')
             else:
                 bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
         case 'get':
@@ -303,7 +304,8 @@ def update_values():
     while True:
         for device in connected_devices:
             for value_type in device.values:
-                publish_raw(client, f'{device.location}-in/{device.node_id}/{device.device_id}/2/0/{ActionType[value_type].value[0]}:0')
+                publish_raw(client,
+                            f'{device.location}-in/{device.node_id}/{device.device_id}/2/0/{ActionType[value_type].value[0]}:0')
         time.sleep(3)
 
 
@@ -321,3 +323,4 @@ if __name__ == '__main__':
     upd.start()
 
     updater.start_polling()
+
