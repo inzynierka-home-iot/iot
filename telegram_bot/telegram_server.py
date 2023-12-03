@@ -15,8 +15,7 @@ from paho.mqtt import client as mqtt_client
 from device import Device
 from device_types import DeviceType
 from action_types import ActionType
-from scheduler import generate_new_schedule, generate_redable_scheduler
-import connected_devices
+from scheduler import generate_new_schedule, generate_readable_scheduler
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -102,7 +101,7 @@ def subscribe(client, topics):
             device = Device(location, node_id, device_id, list(DeviceType)[int(type_id)].name, msg.payload.decode())
             if device in connected_devices:
                 index = connected_devices.index(device)
-                connected_devices[index] = device
+                connected_devices[index].update_info(location, node_id, device_id, list(DeviceType)[int(type_id)].name, msg.payload.decode())
             else:
                 connected_devices.append(device)
                 if chat_id:
@@ -118,9 +117,8 @@ def subscribe(client, topics):
                                      text=f'{connected_devices[index].get_dump_values(list(ActionType)[int(type_id)].name)}')
         elif command == '3':
             if type_id == '22':
-                node_devices = [d for d in connected_devices if d.location == location and d.node_id == node_id]
-                for node_device in node_devices:
-                    node_device.update_last_seen()
+                index = connected_devices.index(device)
+                connected_devices[index].update_last_seen()
 
     client.subscribe(topics)
     client.on_message = on_message
@@ -279,8 +277,9 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
                         if requests == "action=remove":
                             device.update_schedule(dict())
                         else:
-                            readable_schedule = generate_redable_scheduler(home_id, node_id, device_id, requests)
+                            readable_schedule = generate_readable_scheduler(home_id, node_id, device_id, requests)
                             device.update_schedule(readable_schedule)
+                bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": true}}}}')
 
             except Exception as err:
                 print(repr(err))
