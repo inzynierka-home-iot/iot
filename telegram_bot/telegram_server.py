@@ -4,6 +4,11 @@ import telegram
 import time
 import json
 import threading
+import subprocess
+import atexit
+import signal
+import connected_devices
+import sys
 from telegram import Update
 from telegram.ext import Updater, MessageHandler, Filters, CallbackContext
 from paho.mqtt import client as mqtt_client
@@ -21,16 +26,16 @@ logging.basicConfig(
 client = None
 port = 1883
 client_id = 'python-mqtt'
-chat_id = env.TELEGRAM_USER_ID
+chat_id = None
 connected_devices = connected_devices.connected_devices
+location = env.LOCATION
 
 
 def connect_mqtt(broker) -> mqtt_client:
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
             logging.log(logging.INFO, 'Connected to MQTT Broker!')
-            subscribe(client, [('nodeRed/#', 0)
-                , ('home-1-out/#', 0), ('home-1-in/#', 0)])
+            subscribe(client, [('nodeRed/#', 0), (f'{location}-out/#', 0)])
         else:
             logging.log(logging.ERROR, f'Failed to connect, return code {rc}\n')
 
@@ -48,7 +53,8 @@ def publish_raw(client, msg):
     # result: [0, 1]
     status = result[0]
     if status == 0:
-        logging.log(logging.INFO, f'Send `{msg}` to topic `{topic}`')
+        # logging.log(logging.INFO, f'Send `{msg}` to topic `{topic}`')
+        pass
     else:
         logging.log(logging.ERROR, f'Failed to send message to topic `{topic}`')
 
@@ -99,14 +105,16 @@ def subscribe(client, topics):
                 connected_devices[index] = device
             else:
                 connected_devices.append(device)
-                bot.send_message(chat_id=chat_id,
+                if chat_id:
+                    bot.send_message(chat_id=chat_id,
                                  text=f'{{"req": "/{location}/{node_id}/{device_id}/connected/", "res": {{"device": {device}}}}}')
         elif command == '1':
             if device in connected_devices:
                 index = connected_devices.index(device)
                 connected_devices[index].update_value(list(ActionType)[int(type_id)].name, msg.payload.decode())
                 if connected_devices[index].values[list(ActionType)[int(type_id)].name][1]:
-                    bot.send_message(chat_id=chat_id,
+                    if chat_id:
+                        bot.send_message(chat_id=chat_id,
                                      text=f'{connected_devices[index].get_dump_values(list(ActionType)[int(type_id)].name)}')
         elif command == '3':
             if type_id == '22':
@@ -126,10 +134,13 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
         bot = context.bot
         logging.log(logging.INFO, f'Received from app: {message_text}')
     else:
-        chat_id = chat_id
-        message_text = nodeRed
-        bot = telegram.Bot(token=env.TELEGRAM_BOT_TOKEN)
-        logging.log(logging.INFO, f'Received from NodeRed: {message_text}')
+        if chat_id:
+            chat_id = chat_id
+            message_text = nodeRed
+            bot = telegram.Bot(token=env.TELEGRAM_BOT_TOKEN)
+            logging.log(logging.INFO, f'Received from NodeRed: {message_text}')
+        else:
+            return
 
     if message_text.count('/') < 5:
         bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false, "message": "Invalid request"}}}}')
@@ -309,6 +320,12 @@ def update_values():
         time.sleep(3)
 
 
+def shutdown(signum, frame):
+    subprocess.run('sudo systemctl stop mysgw.service', shell=True, text=True, check=True)
+    subprocess.run('node-red-stop', shell=True, text=True, check=True)
+    sys.exit(0)
+
+
 if __name__ == '__main__':
     updater = Updater(token=env.TELEGRAM_BOT_TOKEN)
     dispatcher = updater.dispatcher
@@ -321,5 +338,11 @@ if __name__ == '__main__':
     con.start()
     upd = threading.Thread(target=update_values)
     upd.start()
+
+    subprocess.run('sudo systemctl restart mysgw.service', shell=True, text=True, check=True)
+    subprocess.run('node-red-restart', shell=True, text=True, check=True)
+    atexit.register(shutdown, None, None)
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
 
     updater.start_polling()

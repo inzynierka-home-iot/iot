@@ -36,7 +36,7 @@ def generate_new_schedule(home_id, node_id, device_id, payload):
             "expression": time,
             "payload": {
                 "action": "getTemp",
-                "nodeIn": f"{home_id}-in/{node_id}/{device_id}/2/0/0",
+                "nodeIn": f"nodeRed/{home_id}/{node_id}/{device_id}/status/?V_TEMP",
                 "nodeOut": f"{home_id}-out/{node_id}/{device_id}/1/0/0"
             },
             "type": "json"
@@ -56,7 +56,7 @@ def generate_new_schedule(home_id, node_id, device_id, payload):
             "expression": "*/10 * * * * *",
             "payload": {
                 "action": "maintainTemp",
-                "tempNodeIn": f"{location}-in/{node}/{device}/2/0/0",
+                "tempNodeIn": f"nodeRed/{location}/{node}/{device}/status/?V_TEMP",
                 "tempNodeOut": f"{location}-out/{node}/{device}/1/0/0",
                 "device": f"{home_id}/{node_id}/{device_id}",
                 "requestedTemp": temp
