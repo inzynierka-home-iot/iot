@@ -68,7 +68,7 @@ def generate_new_schedule(home_id, node_id, device_id, payload):
     return schedule
 
 
-def generate_redable_scheduler(home_id, node_id, device_id, payload):
+def generate_readable_scheduler(home_id, node_id, device_id, payload):
     params = payload.split("&")
     readable_schedule = dict()
     for param in params:

@@ -44,6 +44,13 @@ class Device:
         }
         return json.dumps(value)
 
+    def update_info(self, location, node_id, device_id, device_type, description):
+        self.location = location
+        self.node_id = node_id
+        self.device_id = device_id
+        self.device_type = device_type
+        self.description = description
+
     def update_value(self, value_type, value):
         if value_type in self.values.keys():
             self.values[value_type] = (value, self.values[value_type][1])
@@ -62,7 +69,7 @@ class Device:
             with open(f'sensor_data/{self.location}_{self.node_id}_{self.device_id}_{value_type}.txt', 'w') as f:
                 f.writelines(buffer)
 
-    def update_schedule(self,schedule):
+    def update_schedule(self, schedule):
         self.schedule = schedule
 
     def get_dump_values(self, value_types):
