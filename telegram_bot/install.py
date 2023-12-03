@@ -8,7 +8,6 @@ def parse_args():
                         help='path to python3, e.g. /usr/bin/python3, minimal required version is 3.10',
                         default='/usr/bin/python3', required=True)
     parser.add_argument('--telegram_bot_token', type=str, help='token for telegram bot', required=True)
-    parser.add_argument('--telegram_user_id', type=str, help='telegram user id', required=True)
     parser.add_argument('--location', type=str, help='name of the location', required=True)
     parser.add_argument('--install_mqtt', help='install mqtt broker', action='store_true')
     parser.add_argument('--install_node_red', help='install node red', action='store_true')
@@ -55,7 +54,6 @@ def configure_telegram_bot(token, user_id, location):
     print('Configuring telegram bot')
     subprocess.run('> env.py', shell=True, text=True, check=True)
     subprocess.run(f'echo \'TELEGRAM_BOT_TOKEN = \"{token}\"\' >> env.py', shell=True, text=True, check=True)
-    subprocess.run(f'echo \'TELEGRAM_USER_ID = \"{user_id}\"\' >> env.py', shell=True, text=True, check=True)
     subprocess.run(f'echo \'LOCATION = \"{location}\"\' >> env.py', shell=True, text=True, check=True)
     subprocess.run(f'echo \'BROKER_IP = \"localhost\"\' >> env.py', shell=True, text=True, check=True)
 
