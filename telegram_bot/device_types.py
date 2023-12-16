@@ -40,4 +40,5 @@ class DeviceType(Enum):
     S_INFO = 36,
     S_GAS = 37,
     S_GPS = 38,
-    S_WATER_QUALITY = 39
+    S_WATER_QUALITY = 39,
+    S_FAN = 40
