@@ -36,8 +36,8 @@ def generate_new_schedule(home_id, node_id, device_id, payload):
             "expression": time,
             "payload": {
                 "action": "getTemp",
-                "nodeIn": f"nodeRed/{home_id}/{node_id}/{device_id}/status/?V_TEMP",
-                "nodeOut": f"{home_id}-out/{node_id}/{device_id}/1/0/0"
+                "nodeIn": f"nodeRED-out/{home_id}/{node_id}/{device_id}/status/?V_TEMP",
+                "nodeOut": f"nodeRED-in/{home_id}/{node_id}/{device_id}"
             },
             "type": "json"
         }
@@ -56,10 +56,59 @@ def generate_new_schedule(home_id, node_id, device_id, payload):
             "expression": "*/10 * * * * *",
             "payload": {
                 "action": "maintainTemp",
-                "tempNodeIn": f"nodeRed/{location}/{node}/{device}/status/?V_TEMP",
-                "tempNodeOut": f"{location}-out/{node}/{device}/1/0/0",
+                "tempNodeIn": f"nodeRED-out/{location}/{node}/{device}/status/?V_TEMP",
+                "tempNodeOut": f"nodeRED-in/{location}/{node}/{device}",
                 "device": f"{home_id}/{node_id}/{device_id}",
                 "requestedTemp": temp
+            },
+            "type": "json"
+        }
+    elif action == "motionAlarm":
+        try:
+            location, node, device = params.split("&")
+            location = location.split("=")[1]
+            node = node.split("=")[1]
+            device = device.split("=")[1]
+        except:
+            raise Exception("Invalid data format")
+        schedule = {
+            "command": "add",
+            "name": home_id + "/" + node_id + "/" + device_id,
+            "expression": "*/2 * * * * *",
+            "payload": {
+                "action": "motionAlarm",
+                "nodeIn": f"nodeRED-out/{location}/{node}/{device}/status/?V_TRIPPED",
+                "nodeOut": f"nodeRED-in/{location}/{node}/{device}",
+                "device": f"{home_id}/{node_id}/{device_id}"
+            },
+            "type": "json"
+        }
+    elif action == "automaticSprinkler":
+        try:
+            params_listed= params.split("&")
+            dict_params=dict()
+            for param in params_listed:
+                splited_param=param.split("=")
+                dict_params[splited_param[0]]=splited_param[1]
+        except:
+            raise Exception("Invalid data format")
+        schedule = {
+            "command": "add",
+            "name": home_id + "/" + node_id + "/" + device_id,
+            "expression": "*/10 * * * * *",
+            "payload": {
+                "action": "automaticSprinkler",
+                "hum" : {
+                    "nodeIn": f"nodeRED-out/{dict_params['humLocation']}/{dict_params['humNodeId']}/{dict_params['humId']}/status/?V_HUM",
+                    "nodeOut": f"nodeRED-in/{dict_params['humLocation']}/{dict_params['humNodeId']}/{dict_params['humId']}",
+                },
+                "hum_value":dict_params["V_HUM"],
+                "light" : {
+                    "nodeIn": f"nodeRED-out/{dict_params['lightLocation']}/{dict_params['lightNodeId']}/{dict_params['lightId']}/status/?V_LIGHT_LEVEL",
+                    "nodeOut": f"nodeRED-in/{dict_params['lightLocation']}/{dict_params['lightNodeId']}/{dict_params['lightId']}",
+                },
+                "light_value":dict_params["V_LIGHT_LEVEL"],
+                "device": f"{home_id}/{node_id}/{device_id}"
             },
             "type": "json"
         }
@@ -75,4 +124,3 @@ def generate_readable_scheduler(home_id, node_id, device_id, payload):
         key, value = param.split("=")
         readable_schedule[key] = value
     return readable_schedule
-

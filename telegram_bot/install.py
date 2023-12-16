@@ -50,7 +50,7 @@ def install_mysensors(location):
     subprocess.run('sudo make install', shell=True, text=True, check=True)
 
 
-def configure_telegram_bot(token, user_id, location):
+def configure_telegram_bot(token, location):
     print('Configuring telegram bot')
     subprocess.run('> env.py', shell=True, text=True, check=True)
     subprocess.run(f'echo \'TELEGRAM_BOT_TOKEN = \"{token}\"\' >> env.py', shell=True, text=True, check=True)
@@ -69,7 +69,7 @@ if __name__ == '__main__':
         install_node_red()
     if args.install_mysensors:
         install_mysensors(args.location)
-    configure_telegram_bot(args.telegram_bot_token, args.telegram_user_id, args.location)
+    configure_telegram_bot(args.telegram_bot_token, args.location)
 
 
 

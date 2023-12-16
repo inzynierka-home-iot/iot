@@ -3,6 +3,8 @@ import env
 import telegram
 import time
 import json
+import json
+import json
 import threading
 import subprocess
 import atexit
@@ -34,7 +36,7 @@ def connect_mqtt(broker) -> mqtt_client:
     def on_connect(client, userdata, flags, rc):
         if rc == 0:
             logging.log(logging.INFO, 'Connected to MQTT Broker!')
-            subscribe(client, [('nodeRed/#', 0), (f'{location}-out/#', 0)])
+            subscribe(client, [('nodeRED-toUser/#', 0), ('nodeRED-out/#', 0), (f'{location}-out/#', 0)])
         else:
             logging.log(logging.ERROR, f'Failed to connect, return code {rc}\n')
 
@@ -59,10 +61,10 @@ def publish_raw(client, msg):
 
 
 def publish_to_nodeRED(topic, msg):
-    result = client.publish("nodeRED/" + topic, msg)
+    result = client.publish("nodeRED-in/" + topic, msg)
     status = result[0]
     if status == 0:
-        logging.log(logging.INFO, f'Send `{msg}` to topic nodeRED {topic}')
+        logging.log(logging.INFO, f'Send `{msg}` to topic nodeRED-in/{topic}')
         return True
     else:
         logging.log(logging.ERROR, f'Failed to send message to topic nodeRED `{topic}`')
@@ -89,12 +91,16 @@ def subscribe(client, topics):
 
     def on_message(client, userdata, msg):
         global connected_devices
-        if msg.topic.startswith("nodeRed"):
-            msg_payload = msg.topic[7:]
-            handle_message(None, None, msg_payload)
+        if msg.topic.startswith("nodeRED"):
+            msg_trimed=msg.topic[8:]
+            topic_type,msg_payload =msg_trimed.split("/",1)
+            handle_message(None, None, "/"+msg_payload, topic_type)
             return
 
         location, node_id, device_id, command, ack, type_id = msg.topic.split('/')
+        if type_id == '17' or type_id == '18' or device_id == "255":
+            print('arduino')
+            return
         location = location.split('-out')[0]
         device = Device(location, node_id, device_id, '', '')
         if command == '0':
@@ -102,6 +108,7 @@ def subscribe(client, topics):
             if device in connected_devices:
                 index = connected_devices.index(device)
                 connected_devices[index].update_info(location, node_id, device_id, list(DeviceType)[int(type_id)].name, msg.payload.decode())
+                connected_devices[index].update_last_seen()
             else:
                 connected_devices.append(device)
                 if chat_id:
@@ -111,6 +118,7 @@ def subscribe(client, topics):
             if device in connected_devices:
                 index = connected_devices.index(device)
                 connected_devices[index].update_value(list(ActionType)[int(type_id)].name, msg.payload.decode())
+                connected_devices[index].update_last_seen()
                 if connected_devices[index].values[list(ActionType)[int(type_id)].name][1]:
                     if chat_id:
                         bot.send_message(chat_id=chat_id,
@@ -124,9 +132,9 @@ def subscribe(client, topics):
     client.on_message = on_message
 
 
-def handle_message(update: Update, context: CallbackContext, nodeRed: str = None):
+def handle_message(update: Update, context: CallbackContext, nodeRED: str = None, topic_type:str=None):
     global chat_id
-    if not nodeRed:
+    if not nodeRED:
         chat_id = update.effective_chat.id
         message_text = update.message.text
         bot = context.bot
@@ -134,7 +142,7 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
     else:
         if chat_id:
             chat_id = chat_id
-            message_text = nodeRed
+            message_text = nodeRED
             bot = telegram.Bot(token=env.TELEGRAM_BOT_TOKEN)
             logging.log(logging.INFO, f'Received from NodeRed: {message_text}')
         else:
@@ -154,7 +162,11 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
                 index = connected_devices.index(device)
                 response = connected_devices[index].get_dump_values(requests)
                 connected_devices[index].save_values()
-                bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {response}}}')
+                if not nodeRED or topic_type=="toUser":
+                    bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {response}}}')
+                else:
+                    print("resposne: ", response)
+                    publish_to_nodeRED(f"{home_id}/{node_id}/{device_id}",response)
             else:
                 bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
         case 'statusAll':
@@ -182,6 +194,7 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
                 action_params = params.split('?')[1]
                 action_pairs = action_params.split('&')
                 device_type = params.split('?')[2].split('TYPE=')[1] if len(params.split('?')) == 3 else None
+
 
                 if len(action_pairs) == 0:
                     bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
@@ -235,7 +248,7 @@ def handle_message(update: Update, context: CallbackContext, nodeRed: str = None
                         bot.send_message(chat_id=chat_id,
                                          text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
 
-                if nodeRed:
+                if nodeRED:
                     if response:
                         bot.send_message(chat_id=chat_id,
                                          text=f'{{"req": "{message_text}", "res": {{"status": {"true" if result else "false"}}}}}')
@@ -304,6 +317,9 @@ def check_connected():
             publish_raw(client, f'{device.location}-in/{device.node_id}/{device.device_id}/3/0/18:0')
         for device in connected_devices:
             if time.time() - device.last_seen > 120:
+                schedule = generate_new_schedule(device.location, device.node_id, device.device_id, "action=remove")
+                schedule_json = json.dumps(schedule)
+                publish_to_nodeRED("updateSchedule", schedule_json)
                 connected_devices.remove(device)
                 bot.send_message(chat_id=chat_id,
                                  text=f'{{"req": "/{device.location}/{device.node_id}/{device.device_id}/disconnected/", "res": {{"device": {device}}}}}')
@@ -345,3 +361,4 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, shutdown)
 
     updater.start_polling()
+
