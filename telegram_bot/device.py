@@ -71,7 +71,6 @@ class Device:
 
     def update_schedule(self, schedule):
         self.schedule = schedule
-        print(schedule)
 
     def get_dump_values(self, value_types):
         values = {k: v[0] for k, v in self.values.items()} if len(value_types) == 0 else {k: v[0] for k, v in self.values.items() if k in value_types}
