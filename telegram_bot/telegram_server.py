@@ -3,7 +3,13 @@ import env
 import telegram
 import time
 import json
+import json
 import threading
+import subprocess
+import atexit
+import signal
+import connected_devices
+import sys
 import subprocess
 import atexit
 import signal
@@ -16,6 +22,7 @@ from device import Device
 from device_types import DeviceType
 from action_types import ActionType
 from scheduler import generate_new_schedule, generate_readable_scheduler
+from scheduler import generate_new_schedule, generate_readable_scheduler
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -25,6 +32,9 @@ logging.basicConfig(
 client = None
 port = 1883
 client_id = 'python-mqtt'
+chat_id = None
+connected_devices = connected_devices.connected_devices
+location = env.LOCATION
 chat_id = None
 connected_devices = connected_devices.connected_devices
 location = env.LOCATION
@@ -44,6 +54,7 @@ def connect_mqtt(broker) -> mqtt_client:
     return client
 
 
+
 def publish_raw(client, msg):
     home_id_in, node_id, device_id, command, ack, t_msg = msg.split('/')
     t, payload = t_msg.split(':')
@@ -52,6 +63,8 @@ def publish_raw(client, msg):
     # result: [0, 1]
     status = result[0]
     if status == 0:
+        # logging.log(logging.INFO, f'Send `{msg}` to topic `{topic}`')
+        pass
         # logging.log(logging.INFO, f'Send `{msg}` to topic `{topic}`')
         pass
     else:
@@ -101,7 +114,9 @@ def subscribe(client, topics):
             return
         location = location.split('-out')[0]
         device = Device(location, node_id, device_id, '', '')
+        device = Device(location, node_id, device_id, '', '')
         if command == '0':
+            device = Device(location, node_id, device_id, list(DeviceType)[int(type_id)].name, msg.payload.decode())
             device = Device(location, node_id, device_id, list(DeviceType)[int(type_id)].name, msg.payload.decode())
             if device in connected_devices:
                 index = connected_devices.index(device)
@@ -109,6 +124,9 @@ def subscribe(client, topics):
                 connected_devices[index].update_last_seen()
             else:
                 connected_devices.append(device)
+                if chat_id:
+                    bot.send_message(chat_id=chat_id,
+                                 text=f'{{"req": "/{location}/{node_id}/{device_id}/connected/", "res": {{"device": {device}}}}}')
                 if chat_id:
                     bot.send_message(chat_id=chat_id,
                                  text=f'{{"req": "/{location}/{node_id}/{device_id}/connected/", "res": {{"device": {device}}}}}')
@@ -121,8 +139,13 @@ def subscribe(client, topics):
                     if chat_id:
                         bot.send_message(chat_id=chat_id,
                                      text=f'{connected_devices[index].get_dump_values(list(ActionType)[int(type_id)].name)}')
+                    if chat_id:
+                        bot.send_message(chat_id=chat_id,
+                                     text=f'{connected_devices[index].get_dump_values(list(ActionType)[int(type_id)].name)}')
         elif command == '3':
             if type_id == '22':
+                index = connected_devices.index(device)
+                connected_devices[index].update_last_seen()
                 index = connected_devices.index(device)
                 connected_devices[index].update_last_seen()
 
@@ -148,9 +171,14 @@ def handle_message(update: Update, context: CallbackContext, nodeRED: str = None
 
     if message_text.count('/') < 5:
         bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false, "message": "Invalid request"}}}}')
+        bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false, "message": "Invalid request"}}}}')
         return
     _, home_id, node_id, device_id, action, params = message_text.split('/')
 
+    match action:
+        case 'status':
+            requests = params.split('?')[1:]
+            device = Device(home_id, node_id, device_id, None, None)
     match action:
         case 'status':
             requests = params.split('?')[1:]
@@ -176,7 +204,23 @@ def handle_message(update: Update, context: CallbackContext, nodeRED: str = None
 
                 value_type = value_types[1]
                 device = Device(home_id, node_id, device_id, None, None)
+                bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+        case 'statusAll':
+            if params.strip():
+                value_types = params.split('?')
+                if len(value_types) != 2:
+                    bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+                    return
 
+                value_type = value_types[1]
+                device = Device(home_id, node_id, device_id, None, None)
+
+                if home_id != '*' and node_id != '*' and device_id != '*' and device in connected_devices:
+                    index = connected_devices.index(device)
+                    response = connected_devices[index].get_historical_values(value_type)
+                    bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {response}}}')
+                else:
+                    bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
                 if home_id != '*' and node_id != '*' and device_id != '*' and device in connected_devices:
                     index = connected_devices.index(device)
                     response = connected_devices[index].get_historical_values(value_type)
@@ -242,7 +286,14 @@ def handle_message(update: Update, context: CallbackContext, nodeRED: str = None
                         for action_pair in action_pairs:
                             result = result and publish_message(client, home_id, node_id, device_id, True, action_pair)
                             print(result)
+                    device = Device(home_id, node_id, device_id, None, None)
+                    if home_id != '*' and node_id != '*' and device_id != '*' and device in connected_devices:
+                        for action_pair in action_pairs:
+                            result = result and publish_message(client, home_id, node_id, device_id, True, action_pair)
+                            print(result)
                     else:
+                        bot.send_message(chat_id=chat_id,
+                                         text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
                         bot.send_message(chat_id=chat_id,
                                          text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
 
@@ -254,6 +305,58 @@ def handle_message(update: Update, context: CallbackContext, nodeRED: str = None
                     bot.send_message(chat_id=chat_id,
                                      text=f'{{"req": "{message_text}", "res": {{"status": {"true" if result else "false"}}}}}')
             else:
+                bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+        case 'get':
+            match home_id:
+                case '*':
+                    bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {connected_devices}}}')
+                case _:
+                    match node_id:
+                        case '*':
+                            bot.send_message(chat_id=chat_id,
+                                             text=f'{{"req": "{message_text}", "res": {[device for device in connected_devices if device.location == home_id]}}}')
+                        case _:
+                            match device_id:
+                                case '*':
+                                    if device_id == '*':
+                                        bot.send_message(chat_id=chat_id,
+                                                         text=f'{{"req": "{message_text}", "res": {[device for device in connected_devices if device.location == home_id and device.node_id == node_id]}}}')
+                                case _:
+                                    device = Device(home_id, node_id, device_id, None, None)
+                                    if device in connected_devices:
+                                        index = connected_devices.index(Device(home_id, node_id, device_id, None, None))
+                                        bot.send_message(chat_id=chat_id,
+                                                         text=f'{{"req": "{message_text}", "res": {connected_devices[index]}}}')
+        case 'setSchedule':
+            requests = params.split('?')[1]
+            try:
+                schedule = generate_new_schedule(home_id, node_id, device_id, requests)
+                schedule_json = json.dumps(schedule)
+                publish_to_nodeRED("updateSchedule", schedule_json)
+
+                for device in connected_devices:
+                    if device.location == home_id and device.node_id == node_id and device.device_id == device_id:
+                        if requests == "action=remove":
+                            device.update_schedule(dict())
+                        else:
+                            readable_schedule = generate_readable_scheduler(home_id, node_id, device_id, requests)
+                            device.update_schedule(readable_schedule)
+                bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": true}}}}')
+
+            except Exception as err:
+                print(repr(err))
+                bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
+        case 'raw':
+            publish_raw(client, message_text)
+        case _:
+            bot.send_message(chat_id=chat_id, text='Unknown command')
+
+
+def error_handler(update: Update, context: CallbackContext) -> None:
+    logging.error(msg="Exception while handling an update:", exc_info=context.error)
+
+    context.bot.send_message(chat_id=chat_id, text=f'{{"req": "{update.message.text}", "res": {{"status": false}}}}')
+
                 bot.send_message(chat_id=chat_id, text=f'{{"req": "{message_text}", "res": {{"status": false}}}}')
         case 'get':
             match home_id:
@@ -321,8 +424,24 @@ def check_connected():
                 connected_devices.remove(device)
                 bot.send_message(chat_id=chat_id,
                                  text=f'{{"req": "/{device.location}/{device.node_id}/{device.device_id}/disconnected/", "res": {{"device": {device}}}}}')
+                bot.send_message(chat_id=chat_id,
+                                 text=f'{{"req": "/{device.location}/{device.node_id}/{device.device_id}/disconnected/", "res": {{"device": {device}}}}}')
         time.sleep(30)
 
+
+def update_values():
+    while True:
+        for device in connected_devices:
+            for value_type in device.values:
+                publish_raw(client,
+                            f'{device.location}-in/{device.node_id}/{device.device_id}/2/0/{ActionType[value_type].value[0]}:0')
+        time.sleep(3)
+
+
+def shutdown(signum, frame):
+    subprocess.run('sudo systemctl stop mysgw.service', shell=True, text=True, check=True)
+    subprocess.run('node-red-stop', shell=True, text=True, check=True)
+    sys.exit(0)
 
 def update_values():
     while True:
@@ -346,6 +465,17 @@ if __name__ == '__main__':
     client.loop_start()
 
     dispatcher.add_handler(MessageHandler(Filters.text, handle_message))
+    dispatcher.add_error_handler(error_handler)
+    con = threading.Thread(target=check_connected)
+    con.start()
+    upd = threading.Thread(target=update_values)
+    upd.start()
+
+    subprocess.run('sudo systemctl restart mysgw.service', shell=True, text=True, check=True)
+    subprocess.run('node-red-restart', shell=True, text=True, check=True)
+    atexit.register(shutdown, None, None)
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
     dispatcher.add_error_handler(error_handler)
     con = threading.Thread(target=check_connected)
     con.start()
