@@ -5,9 +5,10 @@
 #define PUBLISH_TOPIC_PREFIX "home-1-out"
 #define SUBSCRIBE_TOPIC_PREFIX "home-1-in"
 
-const char* ssid = "";
-const char* password = "";
+const char *ssid = "";
+const char *password = "";
 const char* mqtt_server = "";
+
 const char* deviceName = "node-2"; 
 const unsigned long delayTime = 60*1000UL;
 unsigned long lastMillis = millis();
@@ -18,6 +19,7 @@ const int redPin = 21;
 const int greenPin = 22;
 const int bluePin = 23;
 const int dhtPin = 32;
+const int ledPinRed = 15;
 
 int redValue = 5;
 int greenValue = 30;
@@ -63,13 +65,19 @@ void present_initial_values() {
   sprintf(topicBuff, "%s/2/1/1/0/1", PUBLISH_TOPIC_PREFIX);
   sprintf(msgBuff, "%f", humi);
   client.publish(topicBuff, msgBuff);
+
+  sprintf(topicBuff, "%s/2/2/1/0/2", PUBLISH_TOPIC_PREFIX);
+  sprintf(msgBuff, "%d", digitalRead(ledPinRed));
+  client.publish(topicBuff, msgBuff);
 }
 
 void presentation() {
   sprintf(topicBuff, "%s/2/0/0/0/26", PUBLISH_TOPIC_PREFIX);
   client.publish(topicBuff, "RGB LED");
   sprintf(topicBuff, "%s/2/1/0/0/7", PUBLISH_TOPIC_PREFIX);
-  client.publish(topicBuff, "Humidity sensor");
+  client.publish(topicBuff, "Czujnik wilgotnosci");
+  sprintf(topicBuff, "%s/2/2/0/0/3", PUBLISH_TOPIC_PREFIX);
+  client.publish(topicBuff, "Czerwony LED");
 
   present_initial_values();
 }
@@ -110,14 +118,20 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
     greenValue = get_int_from_hex(payloadString[2], payloadString[3]);
     analogWrite(bluePin, get_int_from_hex(payloadString[4], payloadString[5]));
     blueValue = get_int_from_hex(payloadString[4], payloadString[5]);
-    sprintf(topicBuff, "%s/1/0/1/0/40", PUBLISH_TOPIC_PREFIX); 
+    sprintf(topicBuff, "%s/2/0/1/0/40", PUBLISH_TOPIC_PREFIX); 
     get_hex_msg();
+    client.publish(topicBuff, msgBuff);
+  }
+  if (topic == "home-1-in/2/2/1/0/2") {
+    digitalWrite(ledPinRed, payloadString == "1" ? HIGH : LOW);
+    sprintf(topicBuff, "%s/2/2/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(msgBuff, "%d", digitalRead(ledPinRed));
     client.publish(topicBuff, msgBuff);
   }
 
   // request
   if (topic == "home-1-in/2/0/2/0/40") {
-    sprintf(topicBuff, "%s/1/0/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(topicBuff, "%s/2/0/1/0/40", PUBLISH_TOPIC_PREFIX);
     get_hex_msg();
     client.publish(topicBuff, msgBuff);
   }
@@ -127,15 +141,24 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
     sprintf(msgBuff, "%f", humi);
     client.publish(topicBuff, msgBuff);
   }
+  if (topic == "home-1-in/2/2/2/0/2") {
+    sprintf(topicBuff, "%s/2/2/1/0/2", PUBLISH_TOPIC_PREFIX);
+    sprintf(msgBuff, "%d", digitalRead(ledPinRed));
+    client.publish(topicBuff, msgBuff);
+  }
 
   // heartbeat
   if (topic == "home-1-in/2/0/3/0/18") {
     sprintf(topicBuff, "%s/2/0/3/0/22", PUBLISH_TOPIC_PREFIX);
-    client.publish(topicBuff, "");
+    client.publish(topicBuff, "1");
   }
   if (topic == "home-1-in/2/1/3/0/18") {
     sprintf(topicBuff, "%s/2/1/3/0/22", PUBLISH_TOPIC_PREFIX);
-    client.publish(topicBuff, "");
+    client.publish(topicBuff, "1");
+  }
+  if (topic == "home-1-in/2/2/3/0/18") {
+    sprintf(topicBuff, "%s/2/2/3/0/22", PUBLISH_TOPIC_PREFIX);
+    client.publish(topicBuff, "1");
   }
 }
 
@@ -161,6 +184,7 @@ void setup() {
   pinMode(redPin, OUTPUT);
   pinMode(greenPin, OUTPUT);
   pinMode(bluePin, OUTPUT);
+  pinMode(ledPinRed, OUTPUT);
   analogWrite(redPin, redValue);
   analogWrite(greenPin, greenValue);
   analogWrite(bluePin, blueValue);

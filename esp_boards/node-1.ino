@@ -166,7 +166,6 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
     sprintf(topicBuff, "%s/1/5/1/0/3", PUBLISH_TOPIC_PREFIX);
     sprintf(msgBuff, "%d", (int) (fanSpeedValue / 2.5));
     client.publish(topicBuff, msgBuff);
-
   }
   if (topic == "home-1-in/1/5/1/0/10") {
     fanDirectionValue = payloadString.toInt();
@@ -321,11 +320,7 @@ void buttonLoop() {
     Serial.println("Button pressed");
   }
 }
-// void keepConnected(){
-//   for (;;;){
-//     presentation();
-//   }
-// }
+
 void loop() {
   buttonLoop();
   tempLoop();
