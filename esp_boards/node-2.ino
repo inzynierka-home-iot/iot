@@ -5,10 +5,9 @@
 #define PUBLISH_TOPIC_PREFIX "home-1-out"
 #define SUBSCRIBE_TOPIC_PREFIX "home-1-in"
 
-const char *ssid = "";
-const char *password = "";
+const char* ssid = "";
+const char* password = "";
 const char* mqtt_server = "";
-
 const char* deviceName = "node-2"; 
 const unsigned long delayTime = 60*1000UL;
 unsigned long lastMillis = millis();

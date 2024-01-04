@@ -7,11 +7,9 @@
 #define PUBLISH_TOPIC_PREFIX "home-1-out"
 #define SUBSCRIBE_TOPIC_PREFIX "home-1-in"
 
-
-const char *ssid = "";
-const char *password = "";
+const char* ssid = "";
+const char* password = "";
 const char* mqtt_server = "";
-
 const char* deviceName = "node-1"; 
 const unsigned long delayTime = 60*1000UL;
 unsigned long lastMillis = millis();
@@ -20,7 +18,6 @@ unsigned long tempLastMillis = millis();
 
 const int ledPinGreen = 15;
 const int sprinklerPin = 22;
-// const int ledPinRed = 23;
 const int buttonPin = 4;
 const int tempPin = 2;
 const int fanTempPin = 18;
@@ -65,10 +62,6 @@ void present_initial_values() {
   sprintf(msgBuff, "%d", digitalRead(sprinklerPin));
   client.publish(topicBuff, msgBuff);
 
-  // sprintf(topicBuff, "%s/1/3/1/0/2", PUBLISH_TOPIC_PREFIX);
-  // sprintf(msgBuff, "%d", digitalRead(ledPinRed));
-  // client.publish(topicBuff, msgBuff);
-
   sprintf(topicBuff, "%s/1/4/1/0/36", PUBLISH_TOPIC_PREFIX);
   client.publish(topicBuff, lockStatus ? "1" : "0");
 
@@ -95,8 +88,6 @@ void presentation() {
   client.publish(topicBuff, "Czujnik temperatury");
   sprintf(topicBuff, "%s/1/2/0/0/31", PUBLISH_TOPIC_PREFIX);
   client.publish(topicBuff, "Zraszacz");
-  // sprintf(topicBuff, "%s/1/3/0/0/3", PUBLISH_TOPIC_PREFIX);
-  // client.publish(topicBuff, "Red LED");
   sprintf(topicBuff, "%s/1/4/0/0/19", PUBLISH_TOPIC_PREFIX);
   client.publish(topicBuff, "Zamek");
   sprintf(topicBuff, "%s/1/5/0/0/40", PUBLISH_TOPIC_PREFIX);
@@ -146,12 +137,6 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
     sprintf(msgBuff, "%d", digitalRead(sprinklerPin));
     client.publish(topicBuff, msgBuff);
   }
-  // if (topic == "home-1-in/1/3/1/0/2") {
-  //   digitalWrite(ledPinRed, payloadString == "1" ? HIGH : LOW);
-  //   sprintf(topicBuff, "%s/1/3/1/0/2", PUBLISH_TOPIC_PREFIX);
-  //   sprintf(msgBuff, "%d", digitalRead(ledPinRed));
-  //   client.publish(topicBuff, msgBuff);
-  // }
   if (topic == "home-1-in/1/5/1/0/0") {
     fanTempValue = 5 * payloadString.toInt();
     analogWrite(fanTempPin, fanTempValue);
@@ -203,11 +188,6 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
     sprintf(msgBuff, "%d", digitalRead(sprinklerPin));
     client.publish(topicBuff, msgBuff);
   }
-  // if (topic == "home-1-in/1/3/2/0/2") {
-  //   sprintf(topicBuff, "%s/1/3/1/0/2", PUBLISH_TOPIC_PREFIX);
-  //   sprintf(msgBuff, "%d", digitalRead(ledPinRed));
-  //   client.publish(topicBuff, msgBuff);
-  // }
   if (topic == "home-1-in/1/4/2/0/36") {
     sprintf(topicBuff, "%s/1/4/1/0/36", PUBLISH_TOPIC_PREFIX);
     client.publish(topicBuff, lockStatus ? "1" : "0");
@@ -246,10 +226,6 @@ void receiveMessage(String topic, byte* payload, unsigned int length) {
     sprintf(topicBuff, "%s/1/2/3/0/22", PUBLISH_TOPIC_PREFIX);
     client.publish(topicBuff, "1");
   }
-  // if (topic == "home-1-in/1/3/3/0/18") {
-  //   sprintf(topicBuff, "%s/1/3/3/0/22", PUBLISH_TOPIC_PREFIX);
-  //   client.publish(topicBuff, "");
-  // }
   if (topic == "home-1-in/1/4/3/0/18") {
     sprintf(topicBuff, "%s/1/4/3/0/22", PUBLISH_TOPIC_PREFIX);
     client.publish(topicBuff, "1");
@@ -281,7 +257,6 @@ void setup() {
   Serial.begin(115200);
   pinMode(ledPinGreen, OUTPUT);
   pinMode(sprinklerPin, OUTPUT);
-  // pinMode(ledPinRed, OUTPUT);
   pinMode(fanTempPin, OUTPUT);
   pinMode(fanSpeedPin, OUTPUT);
   pinMode(fanDirectionPin, OUTPUT);
